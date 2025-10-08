@@ -1,0 +1,492 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Ruleset for material is 'specimen from organism'.",
+  "title": "FAANG sample metadata rules for 'specimen from organism'",
+  "name": "faang_samples_specimen.metadata_rules",
+  "$async": true,
+  "type": "object",
+  "required": [
+    "specimen_collection_date",
+    "geographic_location",
+    "animal_age_at_collection",
+    "developmental_stage",
+    "organism_part",
+    "specimen_collection_protocol",
+    "derived_from"],
+  "properties": {
+    "describedBy": {
+      "const": "https://github.com/FAANG/faang-metadata/blob/master/docs/faang_sample_metadata.md"
+    },
+    "schema_version": {
+      "description": "The version number of the schema in major.minor.patch format.",
+      "type": "string",
+      "pattern": "^[0-9]{1,}.[0-9]{1,}.[0-9]{1,}$",
+      "example": "4.6.1"
+    },
+    "samples_core": {
+      "description": "Core samples-level information.",
+      "type": "object",
+      "$ref": "core/samples/faang_samples_core.metadata_rules.json"
+    },
+    "specimen_collection_date": {
+      "type": "object",
+      "name": "specimen collection date",
+      "description": "Date at which the specimen was collected.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[12]\\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])|[12]\\d{3}-(0[1-9]|1[0-2])|[12]\\d{3}$"
+            },
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        },
+        "units": {
+          "type": "string",
+          "enum": ["YYYY-MM-DD", "YYYY-MM", "YYYY", "restricted access"]
+        }
+      }
+    },
+    "geographic_location": {
+      "type": "object",
+      "name": "geographic location",
+      "description": "The location the sample was collected from with the intention of sequencing, as defined by  the country or sea. Country or sea names should be chosen from the INSDC country list https://www.insdc.org/submitting-standards/country-qualifier-vocabulary/",
+
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "enum": ["Afghanistan", "Albania", "Algeria", "American Samoa", "Andorra", "Angola", "Anguilla",
+            "Antarctica", "Antigua and Barbuda", "Arctic Ocean", "Argentina", "Armenia", "Aruba",
+            "Ashmore and Cartier Islands", "Atlantic Ocean", "Australia", "Austria", "Azerbaijan", "Bahamas",
+            "Bahrain", "Baltic Sea", "Baker Island", "Bangladesh", "Barbados", "Bassas da India", "Belarus",
+            "Belgium", "Belize", "Benin", "Bermuda", "Bhutan", "Bolivia", "Borneo", "Bosnia and Herzegovina",
+            "Botswana", "Bouvet Island", "Brazil", "British Virgin Islands", "Brunei", "Bulgaria", "Burkina Faso",
+            "Burundi", "Cambodia", "Cameroon", "Canada", "Cape Verde", "Cayman Islands", "Central African Republic",
+            "Chad", "Chile", "China", "Christmas Island", "Clipperton Island", "Cocos Islands", "Colombia", "Comoros",
+            "Cook Islands", "Coral Sea Islands", "Costa Rica", "Cote d\u2019Ivoire", "Croatia", "Cuba", "Curacao",
+            "Cyprus", "Czech Republic", "Democratic Republic of the Congo", "Denmark", "Djibouti", "Dominica",
+            "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia",
+            "Eswatini", "Ethiopia", "Europa Island", "Falkland Islands (Islas Malvinas)", "Faroe Islands", "Fiji",
+            "Finland", "France", "French Guiana", "French Polynesia", "French Southern and Antarctic Lands", "Gabon",
+            "Gambia", "Gaza Strip", "Georgia", "Germany", "Ghana", "Gibraltar", "Glorioso Islands", "Greece",
+            "Greenland", "Grenada", "Guadeloupe", "Guam", "Guatemala", "Guernsey", "Guinea", "Guinea-Bissau",
+            "Guyana", "Haiti", "Heard Island and McDonald Islands", "Honduras", "Hong Kong", "Howland Island",
+            "Hungary", "Iceland", "India", "Indian Ocean", "Indonesia", "Iran", "Iraq", "Ireland", "Isle of Man",
+            "Israel", "Italy", "Jamaica", "Jan Mayen", "Japan", "Jarvis Island", "Jersey", "Johnston Atoll", "Jordan",
+            "Juan de Nova Island", "Kazakhstan", "Kenya", "Kerguelen Archipelago", "Kingman Reef", "Kiribati",
+            "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya",
+            "Liechtenstein", "Line Islands", "Lithuania", "Luxembourg", "Macau", "Madagascar", "Malawi", "Malaysia",
+            "Maldives", "Mali", "Malta", "Marshall Islands", "Martinique", "Mauritania", "Mauritius", "Mayotte",
+            "Mediterranean Sea", "Mexico", "Micronesia, Federated States of", "Midway Islands", "Moldova", "Monaco",
+            "Mongolia", "Montenegro", "Montserrat", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru",
+            "Navassa Island", "Nepal", "Netherlands", "New Caledonia", "New Zealand", "Nicaragua", "Niger", "Nigeria",
+            "Niue", "Norfolk Island", "North Korea", "North Macedonia", "North Sea", "Northern Mariana Islands",
+            "Norway", "Oman", "Pacific Ocean", "Pakistan", "Palau", "Palmyra Atoll", "Panama", "Papua New Guinea",
+            "Paracel Islands", "Paraguay", "Peru", "Philippines", "Pitcairn Islands", "Poland", "Portugal",
+            "Puerto Rico", "Qatar", "Republic of the Congo", "Reunion", "Romania", "Ross Sea", "Russia", "Rwanda",
+            "Saint Barthelemy", "Saint Helena", "Saint Kitts and Nevis", "Saint Lucia", "Saint Martin",
+            "Saint Pierre and Miquelon", "Saint Vincent and the Grenadines", "Samoa", "San Marino",
+            "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore",
+            "Sint Maarten", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa",
+            "South Georgia and the South Sandwich Islands", "South Korea", "South Sudan", "Southern Ocean", "Spain",
+            "Spratly Islands", "Sri Lanka", "State of Palestine", "Sudan", "Suriname", "Svalbard", "Sweden",
+            "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Tasman Sea", "Thailand", "Timor-Leste",
+            "Togo", "Tokelau", "Tonga", "Trinidad and Tobago", "Tromelin Island", "Tunisia", "Turkey", "Turkmenistan",
+            "Turks and Caicos Islands", "Tuvalu", "USA", "Uganda", "Ukraine", "United Arab Emirates",
+            "United Kingdom", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela", "Viet Nam", "Virgin Islands",
+            "Wake Island", "Wallis and Futuna", "West Bank", "Western Sahara", "Yemen", "Zambia", "Zimbabwe",
+            "Belgian Congo", "British Guiana", "Burma", "Czechoslovakia", "East Timor",
+            "Former Yugoslav Republic of Macedonia", "Korea", "Macedonia", "Micronesia", "Netherlands Antilles",
+            "Serbia and Montenegro", "Siam", "Swaziland", "The former Yugoslav Republic of Macedonia", "USSR",
+            "Yugoslavia", "Zaire", "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "animal_age_at_collection": {
+      "type": "object",
+      "name": "animal age at collection",
+      "description": "Animal age at the point of collection. An estimate is acceptable where the age is not precisely known.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": [
+            "minutes",
+            "hours",
+            "month",
+            "year",
+            "days",
+            "weeks",
+            "months",
+            "years",
+            "minute",
+            "hour",
+            "day",
+            "week",
+            "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "developmental_stage": {
+      "type": "object",
+      "name": "developmental stage",
+      "description": "Ontology for Developmental stage, UBERON is preferred to EFO.",
+      "required": ["text", "term"],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "term": {
+          "oneOf": [
+            {
+              "type": "string",
+              "graph_restriction": {
+                "ontologies": ["obo:efo", "obo:uberon"],
+                "classes": ["EFO:0000399", "UBERON:0000105"],
+                "relations": ["rdfs:subClassOf"],
+                "direct": false,
+                "include_self": true
+              }
+            },
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        },
+        "ontology_name": {
+          "type": "string",
+          "enum": ["EFO", "UBERON"]
+        }
+      }
+    },
+    "health_status_at_collection": {
+      "type": "array",
+      "name": "health status at collection",
+      "description": "Animal disease / health status at point of collection. Healthy animals should have the term normal, otherwise use the as many disease terms as necessary from EFO.",
+      "items": {
+        "type": "object",
+        "required": ["text", "term"],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "term": {
+            "oneOf": [
+              {
+                "type": "string",
+                "graph_restriction": {
+                  "ontologies": ["obo:pato", "obo:efo"],
+                  "classes": ["PATO:0000461", "EFO:0000408"],
+                  "relations": ["rdfs:subClassOf"],
+                  "direct": false,
+                  "include_self": true
+                }
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "not applicable",
+                  "not collected",
+                  "not provided",
+                  "restricted access"
+                ]
+              }
+            ]
+          },
+          "mandatory": {
+            "const": "recommended"
+          },
+          "ontology_name": {
+            "type": "string",
+            "enum": ["PATO", "EFO"]
+          }
+        }
+      }
+    },
+    "organism_part": {
+      "type": "object",
+      "name": "organism part",
+      "description": "Ontology for part of organism specimen from, UBERON is preferred to BTO.",
+      "required": ["text", "term"],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "term": {
+          "oneOf": [
+            {
+              "type": "string",
+              "graph_restriction": {
+                "ontologies": ["obo:uberon", "obo:bto"],
+                "classes": ["UBERON:0001062", "BTO:0000042"],
+                "relations": ["rdfs:subClassOf"],
+                "direct": false,
+                "include_self": true
+              }
+            },
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        },
+        "ontology_name": {
+          "type": "string",
+          "enum": ["UBERON", "BTO"]
+        }
+      }
+    },
+    "specimen_collection_protocol": {
+      "type": "object",
+      "name": "specimen collection protocol",
+      "description": "A link to the protocol for specimen collection.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "fasted_status": {
+      "type": "object",
+      "name": "fasted status",
+      "description": "Fed, fasted or unknown. Criteria for this status must be in your protocol.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "enum": ["fed", "fasted", "unknown"]
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "number_of_pieces": {
+      "type": "object",
+      "name": "number of pieces",
+      "description": "Number of specimen pieces used.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "units": {
+          "const": "count"
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "specimen_volume": {
+      "type": "object",
+      "name": "specimen volume",
+      "description": "Specimen volume. Total sum if using multiple specimen pieces.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "units": {
+          "type": "string",
+          "enum": ["square centimeters", "liters", "milliliters"]
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "specimen_size": {
+      "type": "object",
+      "name": "specimen size",
+      "description": "Specimen size. Total sum if using multiple specimen pieces.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "units": {
+          "type": "string",
+          "enum": [
+            "meters",
+            "centimeters",
+            "millimeters",
+            "square meters",
+            "square centimeters",
+            "square millimeters"]
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "specimen_weight": {
+      "type": "object",
+      "name": "specimen weight",
+      "description": "Specimen weight. Total sum if using multiple specimen pieces.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "units": {
+          "type": "string",
+          "enum": ["grams", "kilograms"]
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "specimen_picture_url": {
+      "type": "array",
+      "name": "specimen picture url",
+      "description": "A link a picture of the specimen, multiple links allowed.",
+      "items": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {
+            "type": "string",
+            "format": "uri"
+          },
+          "mandatory": {
+            "const": "optional"
+          }
+        }
+      }
+    },
+    "gestational_age_at_sample_collection": {
+      "type": "object",
+      "name": "gestational age at sample collection",
+      "description": "If the animal was pregnant when the specimen was taken, state how long had been pregnant for.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "units": {
+          "type": "string",
+          "enum": ["days", "weeks", "day", "week"]
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "average_incubation_temperature": {
+      "type": "object",
+      "name": "incubation temperature",
+      "description": "For relevant samples (in particular chicken eggs), state the average incubation temperature in degrees celsius.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "units": {
+          "const": "degrees celsius"
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "average_incubation_humidity": {
+      "type": "object",
+      "name": "incubation humidity at sample collection",
+      "description": "For relevant samples (in particular chicken eggs), state the average incubation humidity as a percentage.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "units": {
+          "const": "%"
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "embryonic_stage": {
+      "type": "object",
+      "name": "embryonic stage",
+      "description": "The embryonic stage. Using the 1951 Hamburger Hamilton Stages (https://doi.org/10.1002/jmor.1050880104), contact FAANG DCC to add other stagings.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "enum": [
+            "Early cleavage",
+            "During cleavage",
+            "Late cleavage",
+            "1", "2", "3", "4", "5", "6", "7", "7 to 8-", "8", "9",
+            "9+ to 10-", "10", "11", "12", "13", "13+ to 14-", "14",
+            "14+ to 15-", "15", "16", "17", "18", "19", "20", "21", "22", "23",
+            "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34",
+            "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45",
+            "46"]
+        },
+        "units": {
+          "const": "stage Hamburger Hamilton"
+        },
+        "mandatory": {
+          "const": "optional"
+        }
+      }
+    },
+    "derived_from": {
+      "type": "object",
+      "name": "Derived from",
+      "description": "Sample name or BioSample ID for an animal record.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    }
+  }
+}
