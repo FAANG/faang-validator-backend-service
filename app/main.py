@@ -1,4 +1,7 @@
 import json
+from xml.etree.ElementTree import indent
+
+import uvicorn
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,7 +47,7 @@ async def validate_file(file: UploadFile = File(...)):
         contents = await file.read()
 
         # Parse file contents - now returns all sheets
-        all_sheets_data, sheet_names, error_message = parse_contents_api(contents, file.filename)
+        records, sheet_names, error_message = parse_contents_api(contents, file.filename)
 
         if error_message:
             raise HTTPException(status_code=400, detail=error_message)
@@ -55,9 +58,9 @@ async def validate_file(file: UploadFile = File(...)):
 
         # For validation, we'll use the first sheet's data
         # This maintains compatibility with the existing validation logic
-        first_sheet_name = sheet_names[0]
-        records = all_sheets_data[first_sheet_name]
-
+        # print(all_sheets_data)
+        # first_sheet_name = sheet_names[0]
+        # records = all_sheets_data[first_sheet_name]
 
         validator = UnifiedFAANGValidator()
 
@@ -66,12 +69,16 @@ async def validate_file(file: UploadFile = File(...)):
         print(f"Supported sample types: {', '.join(validator.get_supported_types())}")
         print()
 
-        # validation
-        results = validator.validate_all_records(
-            records,
-            validate_relationships=True,
-            validate_ontology_text=True
-        )
+        # Check if records is empty
+        if not records:
+            results = []  # No records to validate
+        else:
+            # validation
+            results = validator.validate_all_records(
+                records,
+                validate_relationships=True,
+                validate_ontology_text=True
+            )
 
         report = validator.generate_unified_report(results)
         print(report)
@@ -79,18 +86,6 @@ async def validate_file(file: UploadFile = File(...)):
         # BioSample format
         biosample_exports = validator.export_valid_samples_to_biosample(results)
 
-        # if biosample_exports:
-        #     print("\n" + "=" * 60)
-        #     print("BIOSAMPLE EXPORTS")
-        #     print("=" * 60)
-        #
-        #     for sample_type, exports in biosample_exports.items():
-        #         print(f"\n{sample_type.upper()} SAMPLES:")
-        #         print("-" * 30)
-        #
-        #         for export in exports:
-        #             print(f"\nSample: {export['sample_name']}")
-        #             print(json.dumps(export['biosample_format'], indent=2))
 
         # save results to file
         save_results = True
@@ -105,12 +100,12 @@ async def validate_file(file: UploadFile = File(...)):
 
 
         # Return validation results along with all sheets data
-        return {
-            "all_sheets_data": all_sheets_data,
-            "sheet_names": sheet_names
-        }
+        return  {'validation_results': results},
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
+if __name__ == "__main__":
+    # Run the application in debug mode when executed directly
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

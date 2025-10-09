@@ -56,8 +56,9 @@ def parse_contents(contents, filename):
                 df = excel_file.parse(sheet_name)
                 df = df.fillna("")
 
-                # Skip empty sheets
+                # Handle empty sheets by adding an empty list
                 if df.empty:
+                    all_sheets_data[sheet_name] = []
                     continue
 
                 # Extract headers and rows from DataFrame
@@ -138,8 +139,9 @@ def parse_contents_api(contents, filename):
                 df = excel_file.parse(sheet_name)
                 df = df.fillna("")
 
-                # Skip empty sheets
+                # Handle empty sheets by adding an empty list
                 if df.empty:
+                    all_sheets_data[sheet_name] = []
                     continue
 
                 # Extract headers and rows from DataFrame
