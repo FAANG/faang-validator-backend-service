@@ -30,12 +30,12 @@ A FastAPI-based microservice for validating FAANG (Facebook, Amazon, Apple, Netf
 
 3. Run the application:
    ```
-   python main.py
+   python app.main.py
    ```
 
    Alternatively, you can use Uvicorn directly:
    ```
-   uvicorn main:app --reload
+   uvicorn app.main:app --reload
    ```
 
 4. Access the API at http://localhost:8000
