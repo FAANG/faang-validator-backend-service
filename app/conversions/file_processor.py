@@ -69,7 +69,7 @@ def parse_contents(contents, filename):
                 processed_headers = process_headers(headers)
                 # Build JSON data using the same logic as in Google Sheet processor
                 records = build_json_data(processed_headers, rows)
-             
+
                 all_sheets_data[sheet_name] = records
 
             # If no valid sheets were found, return an error
@@ -154,7 +154,7 @@ def parse_contents_api(contents, filename):
                 records = build_json_data(processed_headers, rows)
 
                 all_sheets_data[sheet_name] = records
-                print(json.dumps(records, indent=2, default=str))
+                # print(json.dumps(records, indent=2, default=str))
             # If no valid sheets were found, return an error
             if not all_sheets_data:
                 return None, None, "No valid data found in the Excel file."

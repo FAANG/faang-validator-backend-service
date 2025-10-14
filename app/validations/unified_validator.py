@@ -13,9 +13,9 @@ class UnifiedFAANGValidator:
         self.validators = {
             'organism': OrganismValidator(),
             'organoid': OrganoidValidator(),
-            'specimen_from_organism': SpecimenValidator(),
-            'teleostei_embryo': TeleosteiEmbryoValidator(),
-            'teleostei_post_hatching': TeleosteiPostHatchingValidator(),
+            'specimen from organism': SpecimenValidator(),
+            'teleostei embryo': TeleosteiEmbryoValidator(),
+            'teleostei post-hatching': TeleosteiPostHatchingValidator(),
             # 'cell_culture': CellCultureValidator(),
             # 'cell_line': CellLineValidator(),
         }
