@@ -372,7 +372,11 @@ class RelationshipValidator:
 
         if 'Derived From' in sample:
             derived_from = sample['Derived From']
-            if derived_from and derived_from.strip():
+            if isinstance(derived_from, list):
+                for df in derived_from:
+                    if df and df.strip():
+                        refs.append(df.strip())
+            elif derived_from and derived_from.strip():
                 refs.append(derived_from.strip())
 
         if 'Child Of' in sample:

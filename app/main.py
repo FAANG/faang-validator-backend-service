@@ -100,7 +100,7 @@ async def validate_file(file: UploadFile = File(...)):
 
 
         # Return validation results along with all sheets data
-        return  {'validation_results': results},
+        return   results,
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

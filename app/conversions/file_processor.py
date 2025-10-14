@@ -28,7 +28,7 @@ def parse_contents(contents, filename):
     try:
         if 'csv' in filename:
             # For CSV files, we only have one sheet
-            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')), dtype=str)
             df = df.fillna("")
 
             # Extract headers and rows from DataFrame
@@ -53,7 +53,7 @@ def parse_contents(contents, filename):
             all_sheets_data = {}
 
             for sheet_name in sheet_names:
-                df = excel_file.parse(sheet_name)
+                df = excel_file.parse(sheet_name, dtype=str)
                 df = df.fillna("")
 
                 # Handle empty sheets by adding an empty list
@@ -69,7 +69,7 @@ def parse_contents(contents, filename):
                 processed_headers = process_headers(headers)
                 # Build JSON data using the same logic as in Google Sheet processor
                 records = build_json_data(processed_headers, rows)
-
+             
                 all_sheets_data[sheet_name] = records
 
             # If no valid sheets were found, return an error
@@ -111,7 +111,7 @@ def parse_contents_api(contents, filename):
 
         if 'csv' in filename:
             # For CSV files, we only have one sheet
-            df = pd.read_csv(io.BytesIO(contents))
+            df = pd.read_csv(io.BytesIO(contents), dtype=str)
             df = df.fillna("")
 
             # Extract headers and rows from DataFrame
@@ -136,7 +136,7 @@ def parse_contents_api(contents, filename):
             all_sheets_data = {}
 
             for sheet_name in sheet_names:
-                df = excel_file.parse(sheet_name)
+                df = excel_file.parse(sheet_name, dtype=str)
                 df = df.fillna("")
 
                 # Handle empty sheets by adding an empty list
@@ -154,7 +154,7 @@ def parse_contents_api(contents, filename):
                 records = build_json_data(processed_headers, rows)
 
                 all_sheets_data[sheet_name] = records
-
+                print(json.dumps(records, indent=2, default=str))
             # If no valid sheets were found, return an error
             if not all_sheets_data:
                 return None, None, "No valid data found in the Excel file."
@@ -233,11 +233,13 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
     """
     Build JSON structure from processed headers and rows.
     Only include 'Health Status' if it exists in the headers.
-    Always treat 'Child Of' as a list.
+    Always treat 'Child Of', 'Specimen Picture URL', and 'Derived From' as lists.
     """
     grouped_data = []
     has_health_status = any(h.startswith("Health Status") for h in headers)
     has_child_of = any(h == "Child Of" for h in headers)
+    has_specimen_picture_url = any(h == "Specimen Picture URL" for h in headers)
+    has_derived_from = any(h == "Derived From" for h in headers)
 
     for row in rows:
         record: Dict[str, Any] = {}
@@ -245,6 +247,10 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             record["Health Status"] = []
         if has_child_of:
             record["Child Of"] = []
+        if has_specimen_picture_url:
+            record["Specimen Picture URL"] = []
+        if has_derived_from:
+            record["Derived From"] = []
 
         i = 0
         while i < len(headers):
@@ -275,6 +281,20 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             elif has_child_of and col.startswith("Child Of"):
                 if val:  # Only append non-empty values
                     record["Child Of"].append(val)
+                i += 1
+                continue
+
+            # ✅ Special handling for Specimen Picture URL headers
+            elif has_specimen_picture_url and col.startswith("Specimen Picture URL"):
+                if val:  # Only append non-empty values
+                    record["Specimen Picture URL"].append(val)
+                i += 1
+                continue
+
+            # ✅ Special handling for Derived From headers
+            elif has_derived_from and col.startswith("Derived From"):
+                if val:  # Only append non-empty values
+                    record["Derived From"].append(val)
                 i += 1
                 continue
 
