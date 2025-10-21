@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Type, Optional, Tuple
+from typing import Dict, Any, Type
 from pydantic import BaseModel
 from app.validations.base_validator import BaseValidator
 from app.validations.generic_validator_classes import OntologyValidator, RelationshipValidator
@@ -8,73 +8,16 @@ from app.rulesets_pydantics.teleostei_post_hatching_ruleset import FAANGTeleoste
 class TeleosteiPostHatchingValidator(BaseValidator):
 
     def _initialize_validators(self):
-        self.ontology_validator = OntologyValidator(cache_enabled=True)
-        self.relationship_validator = RelationshipValidator()
+        if self.ontology_validator is None:
+            self.ontology_validator = OntologyValidator(cache_enabled=True)
+        if self.relationship_validator is None:
+            self.relationship_validator = RelationshipValidator()
 
     def get_model_class(self) -> Type[BaseModel]:
         return FAANGTeleosteiPostHatchingSample
 
     def get_sample_type_name(self) -> str:
         return "teleostei_post_hatching"
-
-    def validate_teleostei_post_hatching_sample(
-        self,
-        data: Dict[str, Any],
-        validate_relationships: bool = True,
-    ) -> Tuple[Optional[FAANGTeleosteiPostHatchingSample], Dict[str, List[str]]]:
-
-        model, errors = self.validate_single_record(data)
-        return model, errors
-
-    def validate_with_pydantic(
-        self,
-        teleostei_post_hatchings: List[Dict[str, Any]],
-        validate_relationships: bool = True,
-        all_samples: Dict[str, List[Dict]] = None,
-        validate_ontology_text: bool = True,
-    ) -> Dict[str, Any]:
-
-        return self.validate_records(
-            teleostei_post_hatchings,
-            validate_relationships=validate_relationships,
-            all_samples=all_samples,
-            validate_ontology_text=validate_ontology_text
-        )
-
-    def validate_records(
-        self,
-        sheet_records: List[Dict[str, Any]],
-        validate_relationships: bool = True,
-        all_samples: Dict[str, List[Dict]] = None,
-        validate_ontology_text: bool = True,
-        **kwargs
-    ) -> Dict[str, Any]:
-
-        # base validation results
-        results = super().validate_records(sheet_records, validate_relationships=False, all_samples=all_samples)
-
-        # relationship validation
-        if validate_relationships and all_samples:
-            relationship_errors = self.relationship_validator.validate_derived_from_relationships(all_samples)
-
-            # relationship errors for valid post-hatching samples
-            for sample in results['valid_teleostei_post_hatchings']:
-                sample_name = sample['sample_name']
-                if sample_name in relationship_errors:
-                    sample['relationship_errors'] = relationship_errors[sample_name]
-                    results['summary']['relationship_errors'] += 1
-
-            # relationship errors for invalid post-hatching samples
-            for sample in results['invalid_teleostei_post_hatchings']:
-                sample_name = sample['sample_name']
-                if sample_name in relationship_errors:
-                    if 'relationship_errors' not in sample['errors']:
-                        sample['errors']['relationship_errors'] = []
-                    sample['errors']['relationship_errors'] = relationship_errors[sample_name]
-                    results['summary']['relationship_errors'] += 1
-
-        return results
-
 
     def export_to_biosample_format(self, model: FAANGTeleosteiPostHatchingSample) -> Dict[str, Any]:
 
@@ -269,7 +212,6 @@ class TeleosteiPostHatchingValidator(BaseValidator):
         # Relationships - derived from
         biosample_data["relationships"] = [{
             "type": "derived from",
-            "target": model.derived_from
+            "target": model.derived_from[0]
         }]
-
         return biosample_data

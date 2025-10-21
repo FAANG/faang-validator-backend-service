@@ -1,10 +1,19 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-
+from app.validations.generic_validator_classes import OntologyValidator
+from app.validations.validation_utils import (
+    normalize_ontology_term,
+    is_restricted_value,
+    validate_sample_name,
+    validate_date_format,
+    validate_protocol_url,
+    validate_non_negative_numeric,
+    validate_percentage,
+    validate_url,
+    strip_and_convert_empty_to_none
+)
 from typing import List, Optional, Union, Literal
-import re
 
 from .standard_ruleset import SampleCoreMetadata
-from ..validations.generic_validator_classes import OntologyValidator
 
 
 class HealthStatus(BaseModel):
@@ -16,7 +25,7 @@ class HealthStatus(BaseModel):
         if v in ["not applicable", "not collected", "not provided", "restricted access"]:
             return v
 
-        term = v.replace('_', ':', 1) if '_' in v and ':' not in v else v
+        term = normalize_ontology_term(v)
 
         if term.startswith("EFO:"):
             ontology_name = "EFO"
@@ -37,7 +46,6 @@ class HealthStatus(BaseModel):
             raise ValueError(f"HealthStatus term invalid: {res.errors}")
 
         return v
-
 
 
 class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
@@ -110,7 +118,7 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
 
     specimen_collection_protocol: Union[str, Literal["restricted access"]] = Field(...,
                                                                                    alias="Specimen Collection Protocol")
-    derived_from: str = Field(..., alias="Derived From")
+    derived_from: List[str] = Field(..., alias="Derived From")
 
     # recommended fields
     health_status: Optional[List[HealthStatus]] = Field(None, alias="Health Status",
@@ -160,39 +168,21 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
                                                                                 alias="Embryonic Stage Unit")
 
     @field_validator('sample_name')
-    def validate_sample_name(cls, v):
-        if not v or v.strip() == "":
-            raise ValueError("Sample Name is required and cannot be empty")
-        return v.strip()
+    def validate_sample_name_field(cls, v):
+        return validate_sample_name(v)
 
     @field_validator('specimen_collection_date')
     def validate_specimen_collection_date_format(cls, v, info):
-        if not v or v in ["not applicable", "not collected", "not provided", "restricted access", ""]:
-            return v
-
         values = info.data
         unit = values.get('Unit') or values.get('specimen_collection_date_unit')
-
-        if unit == "YYYY-MM-DD":
-            pattern = r'^[12]\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$'
-        elif unit == "YYYY-MM":
-            pattern = r'^[12]\d{3}-(0[1-9]|1[0-2])$'
-        elif unit == "YYYY":
-            pattern = r'^[12]\d{3}$'
-        else:
-            return v
-
-        if not re.match(pattern, v):
-            raise ValueError(f"Invalid specimen collection date format: {v}. Must match {unit} pattern")
-
-        return v
+        return validate_date_format(v, unit, "Specimen collection date")
 
     @field_validator('developmental_stage_term_source_id')
     def validate_developmental_stage_term(cls, v, info):
-        if v == "restricted access":
+        if is_restricted_value(v):
             return v
 
-        term = v.replace('_', ':', 1) if '_' in v else v
+        term = normalize_ontology_term(v)
 
         if term.startswith("EFO:"):
             ontology_name = "EFO"
@@ -219,10 +209,10 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
 
     @field_validator('organism_part_term_source_id')
     def validate_organism_part_term(cls, v, info):
-        if v == "restricted access":
+        if is_restricted_value(v):
             return v
 
-        term = v.replace('_', ':', 1) if '_' in v else v
+        term = normalize_ontology_term(v)
 
         if term.startswith("UBERON:"):
             ontology_name = "UBERON"
@@ -248,35 +238,36 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
         return v
 
     @field_validator('specimen_collection_protocol')
-    def validate_protocol_url(cls, v):
-        if not v or v == "restricted access":
-            return v
-
-        if not (v.startswith('http://') or v.startswith('https://') or v.startswith('ftp://')):
-            raise ValueError("Protocol must be a valid URL starting with http://, https://, or ftp://")
-
-        return v
+    def validate_protocol_url_field(cls, v):
+        return validate_protocol_url(v, allow_restricted=True)
 
     @field_validator('animal_age_at_collection', mode='before')
     def validate_animal_age(cls, v):
-        if v == "restricted access" or v == "":
-            return v
+        return validate_non_negative_numeric(v, "Animal age", allow_restricted=True)
 
-        try:
-            age_val = float(v)
-            if age_val < 0:
-                raise ValueError("Animal age must be non-negative")
-            return age_val
-        except ValueError as e:
-            if "non-negative" in str(e):
-                raise
-            raise ValueError(f"Animal age must be a valid number, got '{v}'")
+    @field_validator('derived_from', mode='before')
+    def normalize_derived_from(cls, v):
+        if v is None:
+            raise ValueError("Derived from is required")
+
+        if isinstance(v, str):
+            if not v.strip():
+                raise ValueError("Derived from value is required and cannot be empty")
+            return [v.strip()]
+
+        if isinstance(v, list):
+            non_empty = [item.strip() for item in v if item and str(item).strip()]
+            if not non_empty:
+                raise ValueError("Derived from is required and cannot be empty")
+            return non_empty
+
+        raise ValueError("Derived from must be a string or list of strings")
 
     @field_validator('derived_from')
-    def validate_derived_from_value(cls, v):
-        if not v or v.strip() == "":
-            raise ValueError("Derived from value is required and cannot be empty")
-        return v.strip()
+    def validate_single_parent(cls, v):
+        if len(v) != 1:
+            raise ValueError("Specimen samples must be derived from exactly one organism")
+        return v
 
 
     # numeric fields
@@ -284,27 +275,11 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
                      'gestational_age_at_sample_collection', 'average_incubation_temperature',
                      'average_incubation_humidity', mode='before')
     def validate_numeric_fields(cls, v):
-        if not v or v == "" or v == "restricted access":
-            return None
-
-        try:
-            numeric_val = float(v)
-            if numeric_val < 0:
-                raise ValueError("Numeric value must be non-negative")
-            return numeric_val
-        except ValueError as e:
-            if "non-negative" in str(e):
-                raise
-            raise ValueError(f"Value must be a valid number, got '{v}'")
+        return validate_non_negative_numeric(v, "Numeric field", allow_restricted=True)
 
     @field_validator('average_incubation_humidity')
     def validate_humidity_range(cls, v):
-        if v is None:
-            return v
-
-        if not (0 <= v <= 100):
-            raise ValueError("Humidity must be between 0 and 100 percent")
-        return v
+        return validate_percentage(v, "Humidity")
 
     @field_validator('specimen_picture_url')
     def validate_picture_urls(cls, v):
@@ -314,9 +289,8 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
         validated_urls = []
         for url in v:
             if url and url.strip():
-                if not (url.startswith('http://') or url.startswith('https://')):
-                    raise ValueError("Picture URL must be a valid URL starting with http:// or https://")
-                validated_urls.append(url.strip())
+                validated_url = validate_url(url, field_name="Picture URL", allow_restricted=False)
+                validated_urls.append(validated_url)
 
         return validated_urls if validated_urls else None
 
@@ -330,9 +304,7 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
         'average_incubation_humidity_unit', 'embryonic_stage_unit', mode='before'
     )
     def convert_empty_strings_to_none(cls, v):
-        if v is not None and (v == "" or (isinstance(v, list) and all(item == "" for item in v))):
-            return None
-        return v
+        return strip_and_convert_empty_to_none(v)
 
     class Config:
         populate_by_name = True

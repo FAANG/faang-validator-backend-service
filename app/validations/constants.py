@@ -138,12 +138,13 @@ ALLOWED_ANALYSES_TYPES = {
 
 ALLOWED_RELATIONSHIPS = {
     'organism': ['organism'],
-    'organoid': ['specimen from organism'],
-    'specimen from organism': ['organism'],
+    # 'organoid': ['specimen from organism'], ask Alexey
+    'organoid': ['specimen from organism', 'organoid'],
+    'specimen_from_organism': ['organism'],
     'teleostei_embryo': ['organism'],
-    'teleostei_post-hatching': ['organism'],
+    'teleostei_post_hatching': ['organism'],
     'pool_of_specimens': ['specimen_from_organism', 'teleostei_embryo',
-                          'teleostei_post-hatching', 'cell_specimen',
+                          'teleostei_post_hatching', 'cell_specimen',
                           'single_cell_specimen'],
     'cell_specimen': ['specimen_from_organism'],
     'single_cell_specimen': ['specimen_from_organism'],

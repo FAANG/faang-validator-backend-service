@@ -1,0 +1,341 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Ruleset for specimens from teleost fish embryos",
+  "title": "FAANG sample metadata rules for Teleostei embryos",
+  "name": "faang_samples_specimen_teleost_embryo.metadata_rules",
+  "$async": true,
+  "type": "object",
+  "required": [
+    "origin",
+    "reproductive_strategy",
+    "hatching",
+    "time_post_fertilisation",
+    "pre-hatching_water_temperature_average",
+    "post-hatching_water_temperature_average",
+    "degree_days",
+    "growth_media",
+    "medium_replacement_frequency",
+    "percentage_total_somite_number",
+    "average_water_salinity",
+    "photoperiod"
+  ],
+  "properties": {
+    "describedBy": {
+      "const": "https://github.com/FAANG/faang-metadata/blob/master/docs/faang_sample_metadata.md"
+    },
+    "schema_version": {
+      "description": "The version number of the schema in major.minor.patch format.",
+      "type": "string",
+      "pattern": "^[0-9]{1,}.[0-9]{1,}.[0-9]{1,}$",
+      "example": "4.6.1"
+    },
+    "origin": {
+      "type": "object",
+      "name": "Origin",
+      "description": "Organism origin, one of four accepted terms.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "enum": [
+            "Domesticated diploid",
+            "Domesticated Double-haploid",
+            "Domesticated Isogenic",
+            "Wild",
+            "restricted access"
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "reproductive_strategy": {
+      "type": "object",
+      "name": "Reproductive strategy",
+      "description": "Reproductive strategy.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "enum": [
+            "gonochoric",
+            "simultaneous hermaphrodite",
+            "successive hermaphrodite",
+            "restricted access"
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "hatching": {
+      "type": "object",
+      "name": "hatching",
+      "description": "Sampled organism is pre- or post-hatching",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "enum": [
+            "pre",
+            "post",
+            "restricted access"
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "time_post_fertilisation": {
+      "type": "object",
+      "name": "Time post fertilisation",
+      "description": "The time passed since fertilisation.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "enum": ["restricted access"]
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": ["hours", "days", "months", "years", "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "pre-hatching_water_temperature_average": {
+      "type": "object",
+      "name": "Pre-hatching water temperature average",
+      "description": "The average measured water temperature recoded post-hatching in degrees Celsius",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {
+              "type": "string",
+              "enum": ["restricted access"]
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": ["Degrees celsius", "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "post-hatching_water_temperature_average": {
+      "type": "object",
+      "name": "Post-hatching water temperature average",
+      "description": "The average measured water temperature recoded post-hatching in degrees Celsius",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {
+              "type": "string",
+              "enum": ["restricted access"]
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": ["Degrees celsius", "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "degree_days": {
+      "type": "object",
+      "name": "Degree days",
+      "description": "Degree days as calculated using this formula https://cdnsciencepub.com/doi/10.1139/cjfas-2013-0295",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {
+              "type": "string",
+              "enum": ["restricted access"]
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": ["Thermal time", "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "growth_media": {
+      "type": "object",
+      "name": "Growing medium or water",
+      "description": "Whether Growing medium or water was used.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "enum": [
+            "Water",
+            "Growing medium",
+            "restricted access"
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "medium_replacement_frequency": {
+      "type": "object",
+      "name": "Frequency of medium replacement in days.",
+      "description": "Frequency of medium replacement in days.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {
+              "type": "string",
+              "enum": ["restricted access"]
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": ["days", "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "percentage_total_somite_number": {
+      "type": "object",
+      "name": "Percentage of total somite number.",
+      "description": "Percentage of total somite number. Should have recorded 'Segmentation stage' for the 'developmental stage' under the Specimen rules.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {
+              "type": "string",
+              "enum": ["restricted access"]
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": ["%", "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "average_water_salinity": {
+      "type": "object",
+      "name": "Average water salinity",
+      "description": "The average water salinity over organisms entire lifetime.",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {
+              "type": "string",
+              "enum": ["restricted access"]
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": ["parts per thousand", "restricted access"]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "photoperiod": {
+      "type": "object",
+      "name": "Photoperiod",
+      "description": "The photoperiod cycle recorded as light to dark ratio, or as 'natural light",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "string",
+            "pattern": "^2[0-4]L|1[0-9]L|[1-9]L:2[0-4]D|1[0-9]D|[1-9]D$"
+            },
+            {
+              "type": "string",
+              "enum": ["natural light", "restricted access"]
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "generations_from_wild": {
+      "type": "object",
+      "name": "Generations from wild",
+      "description": "Generations from wild, put 0 if a wild caught fish",
+      "required": ["value", "units"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "enum": [
+                "not applicable",
+                "not collected",
+                "not provided",
+                "restricted access"
+              ]
+            }
+          ]
+        },
+        "units": {
+          "type": "string",
+          "enum": [
+            "generations from wild",
+            "not applicable",
+            "not collected",
+            "not provided",
+            "restricted access"
+          ]
+        },
+        "mandatory": {
+          "const": "recommended"
+        }
+      }
+    } 
+  }
+}

@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Ruleset for material is 'cell culture'.",
+  "title": "FAANG sample metadata rules for 'cell culture'",
+  "name": "faang_samples_cell_culture.metadata_rules",
+  "$async": true,
+  "type": "object",
+  "required": [
+    "culture_type",
+    "cell_type",
+    "cell_culture_protocol",
+    "culture_conditions",
+    "number_of_passages",
+    "derived_from"],
+  "properties": {
+    "describedBy": {
+      "const": "https://github.com/FAANG/faang-metadata/blob/master/docs/faang_sample_metadata.md"
+    },
+    "schema_version": {
+      "description": "The version number of the schema in major.minor.patch format.",
+      "type": "string",
+      "pattern": "^[0-9]{1,}.[0-9]{1,}.[0-9]{1,}$",
+      "example": "4.6.1"
+    },
+    "samples_core": {
+      "description": "Core samples-level information.",
+      "type": "object",
+      "$ref": "core/samples/faang_samples_core.metadata_rules.json"
+    },
+    "culture_type": {
+      "type": "object",
+      "name": "culture type",
+      "description": "Provide a child term of BTO_0000214.",
+      "required": ["text", "term"],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "term": {
+          "oneOf": [
+            {
+              "type": "string",
+              "graph_restriction": {
+                "ontologies": ["obo:bto"],
+                "classes": ["BTO:0000214"],
+                "relations": ["rdfs:subClassOf"],
+                "direct": false,
+                "include_self": true
+              }
+            },
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        },
+        "ontology_name": {
+          "const": "BTO"
+        }
+      }
+    },
+    "cell_type": {
+      "type": "object",
+      "name": "cell type",
+      "description": "Provide a cell type from the CL ontology.",
+      "required": ["text", "term"],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "term": {
+          "oneOf": [
+            {
+              "type": "string",
+              "graph_restriction": {
+                "ontologies": ["obo:cl"],
+                "classes": ["CL:0000000"],
+                "relations": ["rdfs:subClassOf"],
+                "direct": false,
+                "include_self": true
+              }
+            },
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        },
+        "ontology_name": {
+          "const": "CL"
+        }
+      }
+    },
+    "cell_culture_protocol": {
+      "type": "object",
+      "name": "cell culture protocol",
+      "description": "Link to protocol describing how the cells were purified.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "culture_conditions": {
+      "type": "object",
+      "name": "culture conditions",
+      "description": "Brief description of culture conditions (e.g. 'on feeder cells', 'E8 media').",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "number_of_passages": {
+      "type": "object",
+      "name": "number of passages",
+      "description": "Number of times the cell line has been re-plated and allowed to grow back to confluency or to some maximum density if using suspension cultures.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "restricted access"
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "derived_from": {
+      "type": "object",
+      "name": "Derived from",
+      "description": "Sample name or BioSample ID for the sample the cell culture was derived from.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    }
+  }
+}

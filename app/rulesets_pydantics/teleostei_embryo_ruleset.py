@@ -1,6 +1,11 @@
 from pydantic import BaseModel, Field, field_validator
+from app.validations.validation_utils import (
+    validate_photoperiod,
+    validate_non_negative_numeric,
+    validate_percentage,
+    strip_and_convert_empty_to_none
+)
 from typing import Optional, Union, Literal
-
 from app.rulesets_pydantics.specimen_ruleset import FAANGSpecimenFromOrganismSample
 
 
@@ -95,18 +100,26 @@ class FAANGTeleosteiEmbryoSample(FAANGSpecimenFromOrganismSample):
 
     # validators
     @field_validator('photoperiod')
-    def validate_photoperiod(cls, v):
-        if v in ["natural light", "restricted access"]:
-            return v
+    def validate_photoperiod_field(cls, v):
+        return validate_photoperiod(v)
 
-        # pattern: e.g., "12L:12D" (light:dark ratio)
-        import re
-        pattern = r'^(2[0-4]|1[0-9]|[1-9])L:(2[0-4]|1[0-9]|[1-9])D$'
-        if not re.match(pattern, v):
-            raise ValueError(
-                f"Photoperiod must be 'natural light' or follow pattern 'XXL:XXD' (e.g., '12L:12D'), got '{v}'"
-            )
-        return v
+    @field_validator(
+        'time_post_fertilisation',
+        'pre_hatching_water_temperature_average',
+        'post_hatching_water_temperature_average',
+        'degree_days',
+        'medium_replacement_frequency',
+        'percentage_total_somite_number',
+        'average_water_salinity',
+        'generations_from_wild',
+        mode='before'
+    )
+    def validate_numeric_fields(cls, v):
+        return validate_non_negative_numeric(v, "Numeric field", allow_restricted=True)
+
+    @field_validator('percentage_total_somite_number')
+    def validate_percentage_range(cls, v):
+        return validate_percentage(v, "Percentage total somite number")
 
     # strip whitespace and convert empty strings to None
     @field_validator(
@@ -130,48 +143,7 @@ class FAANGTeleosteiEmbryoSample(FAANGSpecimenFromOrganismSample):
         mode='before'
     )
     def strip_and_convert_empty(cls, v):
-        if isinstance(v, str):
-            v = v.strip()
-            if v == "":
-                return None
-        elif v == "":
-            return None
-        return v
-
-
-    @field_validator(
-        'time_post_fertilisation',
-        'pre_hatching_water_temperature_average',
-        'post_hatching_water_temperature_average',
-        'degree_days',
-        'medium_replacement_frequency',
-        'percentage_total_somite_number',
-        'average_water_salinity',
-        'generations_from_wild',
-        mode='before'
-    )
-    def validate_numeric_fields(cls, v):
-        if v == "restricted access" or v == "" or v is None:
-            return v
-
-        try:
-            numeric_val = float(v)
-            if numeric_val < 0:
-                raise ValueError("Numeric value must be non-negative")
-            return numeric_val
-        except ValueError as e:
-            if "non-negative" in str(e):
-                raise
-            raise ValueError(f"Value must be a valid number or 'restricted access', got '{v}'")
-
-    @field_validator('percentage_total_somite_number')
-    def validate_percentage_range(cls, v):
-        if v == "restricted access" or v is None:
-            return v
-
-        if not (0 <= v <= 100):
-            raise ValueError("Percentage must be between 0 and 100")
-        return v
+        return strip_and_convert_empty_to_none(v)
 
 
     class Config:

@@ -28,7 +28,7 @@ def parse_contents(contents, filename):
     try:
         if 'csv' in filename:
             # For CSV files, we only have one sheet
-            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')), dtype=str)
+            df = pd.read_csv(io.StringIO(decoded.decode('utf-8-sig')), dtype=str)
             df = df.fillna("")
 
             # Extract headers and rows from DataFrame
@@ -84,8 +84,6 @@ def parse_contents(contents, filename):
         return None, None, f"There was an error processing this file: {e}"
 
     return all_sheets_data, sheet_names, None
-
-
 
 
 def parse_contents_api(contents, filename):
@@ -237,6 +235,7 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
     """
     grouped_data = []
     has_health_status = any(h.startswith("Health Status") for h in headers)
+    has_cell_type = any(h.startswith("Cell Type") for h in headers)
     has_child_of = any(h == "Child Of" for h in headers)
     has_specimen_picture_url = any(h == "Specimen Picture URL" for h in headers)
     has_derived_from = any(h == "Derived From" for h in headers)
@@ -245,6 +244,8 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
         record: Dict[str, Any] = {}
         if has_health_status:
             record["Health Status"] = []
+        if has_cell_type:
+            record["Cell Type"] = []
         if has_child_of:
             record["Child Of"] = []
         if has_specimen_picture_url:
@@ -271,6 +272,24 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
                 else:
                     if val:
                         record["Health Status"].append({
+                            "text": val.strip(),
+                            "term": ""
+                        })
+                    i += 1
+                continue
+            if has_health_status and col.startswith("Cell Type"):
+                # Check next column for Term Source ID
+                if i + 1 < len(headers) and "Term Source ID" in headers[i + 1]:
+                    term_val = row[i + 1] if i + 1 < len(row) else ""
+
+                    record["Cell Type"].append({
+                        "text": val,
+                        "term": term_val
+                    })
+                    i += 2
+                else:
+                    if val:
+                        record["Cell Type"].append({
                             "text": val.strip(),
                             "term": ""
                         })

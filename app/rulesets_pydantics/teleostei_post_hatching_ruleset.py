@@ -1,4 +1,13 @@
 from pydantic import BaseModel, Field, field_validator
+from app.validations.validation_utils import (
+    validate_photoperiod,
+    validate_time_format,
+    validate_non_negative_numeric,
+    validate_percentage,
+    strip_and_convert_empty_to_none,
+    normalize_ontology_term,
+    is_restricted_value
+)
 from typing import Optional, Union, Literal
 from app.rulesets_pydantics.specimen_ruleset import FAANGSpecimenFromOrganismSample
 from app.validations.generic_validator_classes import OntologyValidator
@@ -163,10 +172,10 @@ class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
     # validators
     @field_validator('maturity_state_term_source_id')
     def validate_maturity_state_term(cls, v, info):
-        if v == "restricted access":
+        if is_restricted_value(v):
             return v
 
-        term = v.replace('_', ':', 1) if '_' in v else v
+        term = normalize_ontology_term(v)
 
         if not term.startswith("PATO:"):
             raise ValueError(f"Maturity state term '{v}' should be from PATO ontology")
@@ -186,29 +195,12 @@ class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
         return v
 
     @field_validator('photoperiod')
-    def validate_photoperiod(cls, v):
-        if v in ["natural light", "restricted access"]:
-            return v
-
-        # pattern: e.g., "12L:12D" (light:dark ratio)
-        import re
-        pattern = r'^(2[0-4]|1[0-9]|[1-9])L:(2[0-4]|1[0-9]|[1-9])D$'
-        if not re.match(pattern, v):
-            raise ValueError(
-                f"Photoperiod must be 'natural light' or follow pattern 'XXL:XXD' (e.g., '12L:12D'), got '{v}'"
-            )
-        return v
+    def validate_photoperiod_field(cls, v):
+        return validate_photoperiod(v)
 
     @field_validator('sampling_day_start_time', 'sampling_day_end_time')
-    def validate_time_format(cls, v):
-        if not v or v == "":
-            return None
-
-        import re
-        pattern = r'^([0-1][0-9]|[2][0-3]):([0-5][0-9])$'
-        if not re.match(pattern, v):
-            raise ValueError(f"Time must be in HH:MM format (00:00 to 23:59), got '{v}'")
-        return v
+    def validate_time_format_field(cls, v):
+        return validate_time_format(v, "Sampling time")
 
     @field_validator(
         'time_post_fertilisation',
@@ -225,22 +217,11 @@ class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
         mode='before'
     )
     def validate_numeric_fields(cls, v):
-        if v == "restricted access" or v == "" or v is None:
-            return v
-
-        try:
-            numeric_val = float(v)
-            if numeric_val < 0:
-                raise ValueError("Numeric value must be non-negative")
-            return numeric_val
-        except ValueError as e:
-            if "non-negative" in str(e):
-                raise
-            raise ValueError(f"Value must be a valid number or 'restricted access', got '{v}'")
+        return validate_non_negative_numeric(v, "Numeric field", allow_restricted=True)
 
     @field_validator('average_water_oxygen')
     def validate_oxygen_range(cls, v):
-        if v == "restricted access" or v is None:
+        if is_restricted_value(v) or v is None:
             return v
 
         # check if percentage (0-100) or mg/L (any positive)
@@ -248,9 +229,7 @@ class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
         if v > 100:
             return v  # Assume it's mg/L
 
-        if not (0 <= v <= 100):
-            raise ValueError("Oxygen percentage must be between 0 and 100")
-        return v
+        return validate_percentage(v, "Water oxygen")
 
     # convert empty strings to None for all optional fields
     @field_validator(
@@ -266,13 +245,7 @@ class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
         mode='before'
     )
     def strip_and_convert_empty(cls, v):
-        if isinstance(v, str):
-            v = v.strip()
-            if v == "":
-                return None
-        elif v == "":
-            return None
-        return v
+        return strip_and_convert_empty_to_none(v)
 
     class Config:
         populate_by_name = True

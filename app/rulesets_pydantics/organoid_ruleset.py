@@ -1,9 +1,16 @@
 from pydantic import Field, field_validator, model_validator
 from app.validations.generic_validator_classes import OntologyValidator
-from typing import Optional, Union, Literal
-import re
+from app.validations.validation_utils import (
+    normalize_ontology_term,
+    is_restricted_value,
+    validate_sample_name,
+    validate_date_format,
+    validate_protocol_url,
+    validate_non_negative_numeric,
+    strip_and_convert_empty_to_none
+)
+from typing import Optional, Union, Literal, List
 from datetime import datetime
-
 from .standard_ruleset import SampleCoreMetadata
 
 
@@ -26,14 +33,15 @@ class FAANGOrganoidSample(SampleCoreMetadata):
     type_of_organoid_culture: Literal["2D", "3D"] = Field(..., alias="Type Of Organoid Culture")
     growth_environment: Literal["matrigel", "liquid suspension", "adherent"] = Field(..., alias="Growth Environment")
     growth_environment_unit: Optional[str] = Field(None, alias="Growth Environment Unit")
-    derived_from: str = Field(..., alias="Derived From")
+    derived_from: List[str] = Field(..., alias="Derived From")
 
     # Optional fields
     organ_part_model: Optional[str] = Field(None, alias="Organ Part Model")
     organ_part_model_term_source_id: Optional[Union[str, Literal["restricted access"]]] = Field(None,
                                                                                                 alias="Organ Part Model Term Source ID")
     number_of_frozen_cells: Optional[float] = Field(None, alias="Number Of Frozen Cells")
-    number_of_frozen_cells_unit: Optional[Literal["organoids"]] = Field("organoids", alias="Number Of Frozen Cells Unit")
+    number_of_frozen_cells_unit: Optional[Literal["organoids"]] = Field("organoids",
+                                                                        alias="Number Of Frozen Cells Unit")
     organoid_culture_and_passage_protocol: Optional[Union[str, Literal["restricted access"]]] = Field(None,
                                                                                                       alias="Organoid Culture And Passage Protocol")
     organoid_morphology: Optional[str] = Field(None, alias="Organoid Morphology")
@@ -49,20 +57,16 @@ class FAANGOrganoidSample(SampleCoreMetadata):
                                                                                                         alias="Unit")
     freezing_protocol: Optional[Union[str, Literal["restricted access"]]] = Field(None, alias="Freezing Protocol")
 
-
     @field_validator('sample_name')
-    def validate_sample_name(cls, v):
-        if not v or v.strip() == "":
-            raise ValueError("Sample Name is required and cannot be empty")
-        return v.strip()
-
+    def validate_sample_name_field(cls, v):
+        return validate_sample_name(v)
 
     @field_validator('organ_model_term_source_id')
     def validate_organ_model_term(cls, v, info):
-        if v == "restricted access":
+        if is_restricted_value(v):
             return v
 
-        term = v.replace('_', ':', 1)
+        term = normalize_ontology_term(v)
 
         if term.startswith("UBERON:"):
             ontology_name = "UBERON"
@@ -89,10 +93,10 @@ class FAANGOrganoidSample(SampleCoreMetadata):
 
     @field_validator('organ_part_model_term_source_id')
     def validate_organ_part_term(cls, v, info):
-        if not v or v == "restricted access":
+        if is_restricted_value(v):
             return v
 
-        term = v.replace('_', ':', 1)
+        term = normalize_ontology_term(v)
 
         if term.startswith("UBERON:"):
             ontology_name = "UBERON"
@@ -119,77 +123,77 @@ class FAANGOrganoidSample(SampleCoreMetadata):
 
     @field_validator('freezing_date')
     def validate_freezing_date_format(cls, v, info):
-        if not v or v == "restricted access":
+        if is_restricted_value(v):
             return v
 
         values = info.data
         unit = values.get('Unit') or values.get('freezing_date_unit')
 
-        if unit == "YYYY-MM-DD":
-            pattern = r'^[12]\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$'
-            date_format = '%Y-%m-%d'
-        elif unit == "YYYY-MM":
-            pattern = r'^[12]\d{3}-(0[1-9]|1[0-2])$'
-            date_format = '%Y-%m'
-        elif unit == "YYYY":
-            pattern = r'^[12]\d{3}$'
-            date_format = '%Y'
-        else:
-            return v
+        # Validate format
+        validated_date = validate_date_format(v, unit, "Freezing date")
 
-        if not re.match(pattern, v):
-            raise ValueError(f"Invalid freezing date format: {v}. Must match {unit} pattern")
+        # Additional validation: check if it's a valid date
+        if validated_date and validated_date not in ["not applicable", "not collected", "not provided",
+                                                     "restricted access", ""]:
+            if unit == "YYYY-MM-DD":
+                date_format = '%Y-%m-%d'
+            elif unit == "YYYY-MM":
+                date_format = '%Y-%m'
+            elif unit == "YYYY":
+                date_format = '%Y'
+            else:
+                return validated_date
 
-        try:
-            datetime.strptime(v, date_format)
-        except ValueError:
-            raise ValueError(f"Invalid date value: {v}")
+            try:
+                datetime.strptime(validated_date, date_format)
+            except ValueError:
+                raise ValueError(f"Invalid date value: {validated_date}")
 
-        return v
+        return validated_date
 
     @field_validator('organoid_passage_protocol', 'organoid_culture_and_passage_protocol', 'freezing_protocol')
     def validate_protocol_urls(cls, v):
-        if not v or v == "restricted access":
-            return v
-        if not (v.startswith('http://') or v.startswith('https://')):
-            raise ValueError("Protocol must be a valid URL starting with http:// or https://")
-        return v
+        return validate_protocol_url(v, allow_restricted=True)
 
     @field_validator('organoid_passage', mode='before')
     def validate_organoid_passage(cls, v):
         if v is None or (isinstance(v, str) and v.strip() == ""):
             raise ValueError("Organoid passage is required")
 
-        try:
-            passage_val = float(v)
-            if passage_val < 0:
-                raise ValueError("Organoid passage must be non-negative")
-            return passage_val
-        except ValueError as e:
-            if "non-negative" in str(e):
-                raise
-            raise ValueError(f"Organoid passage must be a valid number, got '{v}'")
+        passage_val = validate_non_negative_numeric(v, "Organoid passage", allow_restricted=False)
+        if passage_val is None:
+            raise ValueError("Organoid passage is required")
+
+        return passage_val
 
     @field_validator('number_of_frozen_cells', mode='before')
     def validate_number_of_frozen_cells(cls, v):
-        if not v or (isinstance(v, str) and v.strip() == ""):
-            return None
+        return validate_non_negative_numeric(v, "Number of frozen cells", allow_restricted=False)
 
-        try:
-            cell_count = float(v)
-            if cell_count < 0:
-                raise ValueError("Number of frozen cells must be non-negative")
-            return cell_count
-        except ValueError as e:
-            if "non-negative" in str(e):
-                raise
-            raise ValueError(f"Number of frozen cells must be a valid number, got '{v}'")
+
+    @field_validator('derived_from', mode='before')
+    def normalize_derived_from(cls, v):
+        if v is None:
+            raise ValueError("Derived from is required")
+
+        if isinstance(v, str):
+            if not v.strip():
+                raise ValueError("Derived from value is required and cannot be empty")
+            return [v.strip()]
+
+        if isinstance(v, list):
+            non_empty = [item.strip() for item in v if item and str(item).strip()]
+            if not non_empty:
+                raise ValueError("Derived from is required and cannot be empty")
+            return non_empty
+
+        raise ValueError("Derived from must be a string or list of strings")
 
     @field_validator('derived_from')
-    def validate_derived_from_value(cls, v):
-        if not v or v.strip() == "":
-            raise ValueError("Derived from value is required and cannot be empty")
-        return v.strip()
+    def validate_single_parent(cls, v):
+        if len(v) != 1:
+            raise ValueError("Organoid samples must be derived from exactly one specimen")
+        return v
 
     # convert empty strings to None for optional fields
     @field_validator(
@@ -200,9 +204,7 @@ class FAANGOrganoidSample(SampleCoreMetadata):
         'incubation_temperature', 'incubation_temperature_unit', mode='before'
     )
     def convert_empty_strings_to_none(cls, v):
-        if v is not None and v.strip() == "":
-            return None
-        return v
+        return strip_and_convert_empty_to_none(v)
 
     @model_validator(mode='after')
     def validate_conditional_requirements(self):
