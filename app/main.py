@@ -1,13 +1,71 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+import cProfile
+import io
+import pstats
+import datetime
+import functools
+import inspect
+from contextlib import contextmanager
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
 import json
 import traceback
 
-
 from app.conversions.file_processor import parse_contents_api
 from app.validations.unified_validator import UnifiedFAANGValidator
+
+# -----------------------
+# Profiling utilities
+# -----------------------
+
+def cprofiled(sortby: str = "cumtime", limit: int = 30):
+    """
+    Decorator that profiles a function (works for sync and async).
+    Prints top 'limit' rows sorted by 'sortby' and returns the function's result.
+    """
+    def decorate(func):
+        if inspect.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def aw(*args, **kwargs):
+                pr = cProfile.Profile(); pr.enable()
+                try:
+                    return await func(*args, **kwargs)
+                finally:
+                    pr.disable()
+                    s = io.StringIO()
+                    pstats.Stats(pr, stream=s).strip_dirs().sort_stats(sortby).print_stats(limit)
+                    print(f"\n--- cProfile ({func.__name__}) ---\n{s.getvalue()}")
+            return aw
+        else:
+            @functools.wraps(func)
+            def w(*args, **kwargs):
+                pr = cProfile.Profile(); pr.enable()
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    pr.disable()
+                    s = io.StringIO()
+                    pstats.Stats(pr, stream=s).strip_dirs().sort_stats(sortby).print_stats(limit)
+                    print(f"\n--- cProfile ({func.__name__}) ---\n{s.getvalue()}")
+            return w
+    return decorate
+
+
+@contextmanager
+def profile_block(name: str = "block", sortby: str = "cumtime", limit: int = 30):
+    """Context manager to profile an arbitrary block of code."""
+    pr = cProfile.Profile()
+    pr.enable()
+    try:
+        yield
+    finally:
+        pr.disable()
+        s = io.StringIO()
+        pstats.Stats(pr, stream=s).strip_dirs().sort_stats(sortby).print_stats(limit)
+        print(f"\n--- cProfile ({name}) ---\n{s.getvalue()}")
+
 
 app = FastAPI(
     title="FAANG Validation API",
@@ -16,6 +74,35 @@ app = FastAPI(
 )
 
 validator = UnifiedFAANGValidator()
+
+# ---------------
+# Per-request cProfile middleware (enable with ?profile=1)
+# ---------------
+@app.middleware("http")
+async def cprofile_middleware(request: Request, call_next):
+    if request.query_params.get("profile") != "1":
+        return await call_next(request)
+
+    pr = cProfile.Profile()
+    pr.enable()
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        pr.disable()
+        s = io.StringIO()
+        pstats.Stats(pr, stream=s).strip_dirs().sort_stats("cumtime").print_stats(40)
+        text = s.getvalue()
+
+        # Save a timestamped report file per request
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        safe_path = request.url.path.strip("/").replace("/", "_") or "root"
+        fname = f"profile-{safe_path}-{stamp}.txt"
+        with open(fname, "w", encoding="utf-8") as f:
+            f.write(text)
+
+        # Also print to console
+        print(f"\n--- cProfile ({request.url.path}) ---\n{text}")
 
 
 class ValidationRequest(BaseModel):
@@ -59,26 +146,30 @@ async def get_supported_types():
     return validator.get_supported_types()
 
 
+# Example of profiling just the heavy calls inside the endpoint:
 @app.post("/validate", response_model=ValidationResponse)
 async def validate_data(request: ValidationRequest):
     try:
-        if request.validate_ontology_text:
-            print("Pre-fetching ontology terms...")
-            await validator.prefetch_all_ontology_terms_async(request.data)
+        # Profile the prefetch phase as a block
+        if request.validate_ontology_text or request.validate_relationships:
+            with profile_block("prefetch_phase"):
+                if request.validate_ontology_text:
+                    await validator.prefetch_all_ontology_terms_async(request.data)
+                if request.validate_relationships:
+                    await validator.prefetch_all_biosample_ids_async(request.data)
 
-        if request.validate_relationships:
-            print("Pre-fetching BioSample IDs...")
-            await validator.prefetch_all_biosample_ids_async(request.data)
+        # Profile validate/report generation function-level:
+        @cprofiled()
+        def run_validation_and_report():
+            results_local = validator.validate_all_records(
+                request.data,
+                validate_relationships=request.validate_relationships,
+                validate_ontology_text=request.validate_ontology_text
+            )
+            report_local = validator.generate_unified_report(results_local)
+            return results_local, report_local
 
-        print("Running validation...")
-        results = validator.validate_all_records(
-            request.data,
-            validate_relationships=request.validate_relationships,
-            validate_ontology_text=request.validate_ontology_text
-        )
-
-        # report
-        report = validator.generate_unified_report(results)
+        results, report = run_validation_and_report()
 
         return ValidationResponse(
             status="success",
@@ -102,71 +193,45 @@ async def validate_data(request: ValidationRequest):
 
 @app.post("/validate-file")
 async def validate_file(file: UploadFile = File(...)):
-    """
-    Validate an uploaded file against FAANG standards.
-
-    Args:
-        file: The file to validate
-
-    Returns:
-        dict: Validation results
-    """
     try:
-        # Read file contents
         contents = await file.read()
-
-        # Parse file contents - now returns all sheets
-        records, sheet_names, error_message = parse_contents_api(contents, file.filename)
-
+        records, sheet_names, headers_map, error_message = parse_contents_api(contents, file.filename)
         if error_message:
             raise HTTPException(status_code=400, detail=error_message)
-
-        # Check if sheet_names is empty or None
         if not sheet_names:
             raise HTTPException(status_code=400, detail="No valid sheets found in the file.")
 
-        # For validation, we'll use the first sheet's data
-        # This maintains compatibility with the existing validation logic
-        # print(all_sheets_data)
-        # first_sheet_name = sheet_names[0]
-        # records = all_sheets_data[first_sheet_name]
-
-
-
         print("FAANG Sample Validation")
         print("=" * 50)
-        print(f"Supported sample types: {', '.join(validator.get_supported_types())}")
-        print()
 
-        # Check if records is empty
         if not records:
-            results = []  # No records to validate
-        else:
-            # validation
-
-            print("Pre-fetching ontology terms...")
-            await validator.prefetch_all_ontology_terms_async(records)
-
-            print("Pre-fetching BioSample IDs...")
-            await validator.prefetch_all_biosample_ids_async(records)
-
-            print("Running validation...")
-            results = validator.validate_all_records(
-                records,
-                validate_relationships=True,
-                validate_ontology_text=True
-            )
-
-            # report
+            results = []
             report = validator.generate_unified_report(results)
+        else:
+            # Profile prefetch + validation separately for visibility
+            with profile_block("prefetch_phase_file"):
+                await validator.prefetch_all_ontology_terms_async(records)
+                await validator.prefetch_all_biosample_ids_async(records)
 
-            return {
-                "status": "success",
-                "filename": file.filename,
-                "message": "File validated successfully",
-                "results": results,
-                "report": report
-            }
+            @cprofiled()
+            def run_validation_and_report_file():
+                res = validator.validate_all_records(
+                    records,
+                    validate_relationships=True,
+                    validate_ontology_text=True
+                )
+                rep = validator.generate_unified_report(res)
+                return res, rep
+
+            results, report = run_validation_and_report_file()
+
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "message": "File validated successfully",
+            "results": results,
+            "report": report
+        }
 
     except Exception as e:
         print(f"Error during validation: {str(e)}")
@@ -181,8 +246,6 @@ async def validate_file(file: UploadFile = File(...)):
         )
 
 
-
-
 @app.get("/export-valid-samples")
 async def export_valid_samples_endpoint():
     return {
@@ -192,4 +255,10 @@ async def export_valid_samples_endpoint():
 
 if __name__ == "__main__":
     import uvicorn
+    # Don’t use cProfile.run('main()') here; it doesn’t call anything meaningful.
+    # Run normally (use ?profile=1 on requests), or profile the whole process like this:
+    #   python -m cProfile -o server.prof -m uvicorn app:app
+    # and visualize with:
+    #   pip install snakeviz
+    #   snakeviz server.prof
     uvicorn.run(app, host="0.0.0.0", port=8000)

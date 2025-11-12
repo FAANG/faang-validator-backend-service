@@ -238,7 +238,7 @@ def collect_ontology_terms_from_data(data: Dict[str, List[Dict]]) -> Set[str]:
         for sample in samples:
             for field in term_id_fields:
                 if field in sample and sample[field]:
-                    term_value = sample[field]
+                    term_value = sample[field]['value'] if isinstance(sample[field], dict) and 'value' in sample[field] else sample[field]
                     if term_value not in ["restricted access", "not applicable", "not collected", "not provided", ""]:
                         # normalize the term
                         if '_' in term_value and ':' not in term_value:
@@ -417,26 +417,38 @@ class RelationshipValidator:
 
                     if isinstance(derived_from, list):
                         for item in derived_from:
-                            if item and self.is_biosample_id(str(item)):
-                                biosample_ids.add(str(item).strip())
-                    elif derived_from and self.is_biosample_id(str(derived_from)):
-                        biosample_ids.add(str(derived_from).strip())
+                            # Extract value from dictionary if present
+                            item_value = item['value'] if isinstance(item, dict) and 'value' in item else item
+                            if item_value and self.is_biosample_id(str(item_value)):
+                                biosample_ids.add(str(item_value).strip())
+                    elif derived_from:
+                        # Extract value from dictionary if present
+                        derived_from_value = derived_from['value'] if isinstance(derived_from, dict) and 'value' in derived_from else derived_from
+                        if derived_from_value and self.is_biosample_id(str(derived_from_value)):
+                            biosample_ids.add(str(derived_from_value).strip())
 
                 # child_of field (organisms)
                 if 'Child Of' in sample:
                     child_of = sample['Child Of']
                     if isinstance(child_of, list):
                         for parent in child_of:
-                            if parent and self.is_biosample_id(str(parent)):
-                                biosample_ids.add(str(parent).strip())
-                    elif child_of and self.is_biosample_id(str(child_of)):
-                        biosample_ids.add(str(child_of).strip())
+                            # Extract value from dictionary if present
+                            parent_value = parent['value'] if isinstance(parent, dict) and 'value' in parent else parent
+                            if parent_value and self.is_biosample_id(str(parent_value)):
+                                biosample_ids.add(str(parent_value).strip())
+                    elif child_of:
+                        # Extract value from dictionary if present
+                        child_of_value = child_of['value'] if isinstance(child_of, dict) and 'value' in child_of else child_of
+                        if child_of_value and self.is_biosample_id(str(child_of_value)):
+                            biosample_ids.add(str(child_of_value).strip())
 
                 # same_as field (SampleCoreMetadata)
                 if 'Same as' in sample:
                     same_as = sample['Same as']
-                    if same_as and self.is_biosample_id(str(same_as)):
-                        biosample_ids.add(str(same_as).strip())
+                    # Extract value from dictionary if present
+                    same_as_value = same_as['value'] if isinstance(same_as, dict) and 'value' in same_as else same_as
+                    if same_as_value and self.is_biosample_id(str(same_as_value)):
+                        biosample_ids.add(str(same_as_value).strip())
 
         return biosample_ids
 
@@ -468,9 +480,13 @@ class RelationshipValidator:
         return biosample_ids
 
     def normalize_child_of(self, child_of) -> List[str]:
-        if isinstance(child_of, str):
+        if isinstance(child_of, dict) and 'value' in child_of:
+            child_of = [child_of['value']]
+        elif isinstance(child_of, str):
             child_of = [child_of]
-        elif not isinstance(child_of, list):
+        elif isinstance(child_of, list):
+            child_of = [item['value'] if isinstance(item, dict) and 'value' in item else item for item in child_of]
+        else:
             child_of = []
 
         return [pid.strip() for pid in child_of if pid and str(pid).strip()]
@@ -643,10 +659,16 @@ class RelationshipValidator:
     def normalize_material_name(self, material: str) -> str:
         if not material:
             return ''
-        return material.lower().replace(' ', '_')
+        
+        material_value = material['value'] if isinstance(material, dict) and 'value' in material else material
+        
+        return material_value.lower().replace(' ', '_')
 
     def extract_sample_name(self, sample: Dict) -> str:
-        return sample.get('Sample Name', '')
+        sample_name_field = sample.get('Sample Name', '')
+        if isinstance(sample_name_field, dict) and 'value' in sample_name_field:
+            return sample_name_field['value']
+        return sample_name_field
 
     def extract_material(self, sample: Dict, sample_type: str) -> str:
         material = sample.get('Material', '')
@@ -682,7 +704,12 @@ class RelationshipValidator:
         return [ref for ref in refs if ref and ref.strip()]
 
     def get_organism_identifier(self, organism: Dict) -> str:
-        sample_name = organism.get('Sample Name', '')
+        sample_name_field = organism.get('Sample Name', '')
+        if isinstance(sample_name_field, dict) and 'value' in sample_name_field:
+            sample_name = sample_name_field['value']
+        else:
+            sample_name = sample_name_field
+
         if sample_name and sample_name.strip():
             return sample_name.strip()
         return 'unknown'

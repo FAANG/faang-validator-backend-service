@@ -125,7 +125,11 @@ class BaseValidator(ABC):
         }
 
         for i, record in enumerate(sheet_records):
-            sample_name = record.get('Sample Name', f'{sample_type}_{i}')
+            raw_sample_name = record.get('Sample Name', f'{sample_type}_{i}')
+            if isinstance(raw_sample_name, dict) and 'value' in raw_sample_name:
+                sample_name = raw_sample_name['value']
+            else:
+                sample_name = raw_sample_name
 
             model, errors = self.validate_single_record(record)
 

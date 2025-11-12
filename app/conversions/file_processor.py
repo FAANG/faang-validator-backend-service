@@ -38,7 +38,7 @@ def parse_contents(contents, filename):
             # Process headers using the same logic as in Google Sheet processor
             processed_headers = process_headers(headers)
             # Build JSON data using the same logic as in Google Sheet processor
-            records = build_json_data(processed_headers, rows)
+            records = build_json_data(processed_headers, headers, rows)
 
             # For CSV, we use a default sheet name
             sheet_name = "Sheet 1"
@@ -68,7 +68,7 @@ def parse_contents(contents, filename):
                 # Process headers using the same logic as in Google Sheet processor
                 processed_headers = process_headers(headers)
                 # Build JSON data using the same logic as in Google Sheet processor
-                records = build_json_data(processed_headers, rows)
+                records = build_json_data(processed_headers, headers, rows)
 
                 all_sheets_data[sheet_name] = records
 
@@ -95,17 +95,19 @@ def parse_contents_api(contents, filename):
         filename (str): The name of the uploaded file
 
     Returns:
-        tuple: (all_sheets_data, sheet_names, error_message)
+        tuple: (all_sheets_data, sheet_names, all_sheets_headers_map, error_message)
             - all_sheets_data: Dictionary with sheet names as keys and lists of dictionaries containing the parsed data as values
             - sheet_names: List of sheet names
+            - all_sheets_headers_map: Dictionary with sheet names as keys and lists of dictionaries mapping processed headers to original headers.
             - error_message: Error message if any, None otherwise
     """
     try:
+        all_sheets_headers_map = {}
         if not filename:
-            return None, None, "Filename is required."
+            return None, None, None, "Filename is required."
 
         if not contents:
-            return None, None, "File contents are empty."
+            return None, None, None, "File contents are empty."
 
         if 'csv' in filename:
             # For CSV files, we only have one sheet
@@ -119,11 +121,12 @@ def parse_contents_api(contents, filename):
             # Process headers using the same logic as in Google Sheet processor
             processed_headers = process_headers(headers)
             # Build JSON data using the same logic as in Google Sheet processor
-            records = build_json_data(processed_headers, rows)
+            records = build_json_data(processed_headers, headers, rows)
 
             # For CSV, we use a default sheet name
             sheet_name = "Sheet 1"
             all_sheets_data = {sheet_name: records}
+            all_sheets_headers_map[sheet_name] = [{'processed': p, 'original': o} for p, o in zip(processed_headers, headers)]
             sheet_names = [sheet_name]
 
         elif 'xls' in filename or 'xlsx' in filename:
@@ -140,31 +143,34 @@ def parse_contents_api(contents, filename):
                 # Handle empty sheets by adding an empty list
                 if df.empty:
                     all_sheets_data[sheet_name] = []
+                    all_sheets_headers_map[sheet_name] = [] # Add empty header map for empty sheets
                     continue
 
                 # Extract headers and rows from DataFrame
                 headers = df.columns.tolist()
+                print(headers)
                 rows = df.values.tolist()
 
                 # Process headers using the same logic as in Google Sheet processor
                 processed_headers = process_headers(headers)
                 # Build JSON data using the same logic as in Google Sheet processor
-                records = build_json_data(processed_headers, rows)
+                records = build_json_data(processed_headers, headers, rows)
 
                 all_sheets_data[sheet_name] = records
+                all_sheets_headers_map[sheet_name] = [{'processed': p, 'original': o} for p, o in zip(processed_headers, headers)]
                 # print(json.dumps(records, indent=2, default=str))
             # If no valid sheets were found, return an error
             if not all_sheets_data:
-                return None, None, "No valid data found in the Excel file."
+                return None, None, None, "No valid data found in the Excel file."
 
         else:
-            return None, None, "Invalid file type. Please upload a CSV or Excel file."
+            return None, None, None, "Invalid file type. Please upload a CSV or Excel file."
 
     except Exception as e:
         print(e)
-        return None, None, f"There was an error processing this file: {e}"
+        return None, None, None, f"There was an error processing this file: {e}"
 
-    return all_sheets_data, sheet_names, None
+    return all_sheets_data, sheet_names, all_sheets_headers_map, None
 
 
 def read_workbook_xlsx(path: str):
@@ -227,7 +233,7 @@ def process_headers(headers: List[str]) -> List[str]:
     return new_headers
 
 
-def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str, Any]]:
+def build_json_data(headers: List[str], original_headers: List[str], rows: List[List[str]]) -> List[Dict[str, Any]]:
     """
     Build JSON structure from processed headers and rows.
     Only include 'Health Status' if it exists in the headers.
@@ -256,6 +262,7 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
         i = 0
         while i < len(headers):
             col = headers[i]
+            original_header = original_headers[i]
             val = row[i] if i < len(row) else ""
 
             # ✅ Special handling if Health Status is in headers
@@ -266,14 +273,16 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
 
                     record["Health Status"].append({
                         "text": val,
-                        "term": term_val
+                        "term": term_val,
+                        "original_header": original_header
                     })
                     i += 2
                 else:
                     if val:
                         record["Health Status"].append({
                             "text": val.strip(),
-                            "term": ""
+                            "term": "",
+                            "original_header": original_header
                         })
                     i += 1
                 continue
@@ -284,14 +293,16 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
 
                     record["Cell Type"].append({
                         "text": val,
-                        "term": term_val
+                        "term": term_val,
+                        "original_header": original_header
                     })
                     i += 2
                 else:
                     if val:
                         record["Cell Type"].append({
                             "text": val.strip(),
-                            "term": ""
+                            "term": "",
+                            "original_header": original_header
                         })
                     i += 1
                 continue
@@ -299,21 +310,30 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             # ✅ Special handling for Child Of headers
             elif has_child_of and col.startswith("Child Of"):
                 if val:  # Only append non-empty values
-                    record["Child Of"].append(val)
+                    record["Child Of"].append({
+                        "value": val,
+                        "original_header": original_header
+                    })
                 i += 1
                 continue
 
             # ✅ Special handling for Specimen Picture URL headers
             elif has_specimen_picture_url and col.startswith("Specimen Picture URL"):
                 if val:  # Only append non-empty values
-                    record["Specimen Picture URL"].append(val)
+                    record["Specimen Picture URL"].append({
+                        "value": val,
+                        "original_header": original_header
+                    })
                 i += 1
                 continue
 
             # ✅ Special handling for Derived From headers
             elif has_derived_from and col.startswith("Derived From"):
                 if val:  # Only append non-empty values
-                    record["Derived From"].append(val)
+                    record["Derived From"].append({
+                        "value": val,
+                        "original_header": original_header
+                    })
                 i += 1
                 continue
 
@@ -321,9 +341,15 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             if col in record:
                 if not isinstance(record[col], list):
                     record[col] = [record[col]]
-                record[col].append(val)
+                record[col].append({
+                    "value": val,
+                    "original_header": original_header
+                })
             else:
-                record[col] = val
+                record[col] = {
+                    "value": val,
+                    "original_header": original_header
+                }
             i += 1
 
         grouped_data.append(record)
