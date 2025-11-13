@@ -1,5 +1,5 @@
 from pydantic import Field, field_validator, model_validator
-from app.validations.generic_validator_classes import OntologyValidator
+from app.validations.generic_validator_classes import get_ontology_validator
 from app.validations.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
@@ -78,7 +78,7 @@ class FAANGOrganoidSample(SampleCoreMetadata):
             raise ValueError(f"Organ model term '{v}' should be from UBERON or BTO ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name=ontology_name,
@@ -108,7 +108,7 @@ class FAANGOrganoidSample(SampleCoreMetadata):
             raise ValueError(f"Organ part model term '{v}' should be from UBERON or BTO ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name=ontology_name,

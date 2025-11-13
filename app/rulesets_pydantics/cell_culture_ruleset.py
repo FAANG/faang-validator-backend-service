@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from app.validations.generic_validator_classes import OntologyValidator
+from app.validations.generic_validator_classes import get_ontology_validator
 from app.validations.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
@@ -26,7 +26,7 @@ class CellType(BaseModel):
             raise ValueError(f"Cell type term '{v}' should be from CL ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="CL",
@@ -78,7 +78,7 @@ class FAANGCellCultureSample(SampleCoreMetadata):
             raise ValueError(f"Culture type term '{v}' should be from BTO ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="BTO",

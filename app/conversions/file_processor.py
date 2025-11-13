@@ -7,6 +7,8 @@ from typing import List, Any, Dict
 
 import pandas as pd
 
+from app.profiler import cprofiled
+
 
 def parse_contents(contents, filename):
     """
@@ -85,7 +87,7 @@ def parse_contents(contents, filename):
 
     return all_sheets_data, sheet_names, None
 
-
+@cprofiled()
 def parse_contents_api(contents, filename):
     """
     Parse the contents of an uploaded file from FastAPI and convert it to a structured format.

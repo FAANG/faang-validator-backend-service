@@ -1,5 +1,6 @@
 from typing import Dict, List, Any
 
+from app.profiler import cprofiled
 from app.validations.teleostei_embryo_validator import TeleosteiEmbryoValidator
 from app.validations.organism_validator import OrganismValidator
 from app.validations.organoid_validator import OrganoidValidator
@@ -89,6 +90,7 @@ class UnifiedFAANGValidator:
         self.shared_ontology_validator.batch_fetch_from_ols_sync(list(term_ids))
         print(f"Pre-fetch complete. Cache now contains {len(self.shared_ontology_validator._cache)} terms.")
 
+    @cprofiled()
     # async version for use in FastAPI endpoints
     async def prefetch_all_ontology_terms_async(self, data: Dict[str, List[Dict[str, Any]]]):
         # collect unique term IDs
@@ -119,6 +121,7 @@ class UnifiedFAANGValidator:
         print(
             f"Pre-fetch complete. BioSample cache now contains {len(self.shared_relationship_validator.biosamples_cache)} entries.")
 
+    @cprofiled()
     # async version for FastAPI endpoint
     async def prefetch_all_biosample_ids_async(self, data: Dict[str, List[Dict[str, Any]]]):
         # shared relationship validator
@@ -137,6 +140,7 @@ class UnifiedFAANGValidator:
         print(
             f"Pre-fetch complete. BioSample cache now contains {len(self.shared_relationship_validator.biosamples_cache)} entries.")
 
+    @cprofiled()
     def validate_all_records(
         self,
         data: Dict[str, List[Dict[str, Any]]],

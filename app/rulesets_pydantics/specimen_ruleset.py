@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from app.validations.generic_validator_classes import OntologyValidator
+from app.validations.generic_validator_classes import get_ontology_validator
 from app.validations.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
@@ -34,7 +34,7 @@ class HealthStatus(BaseModel):
         else:
             raise ValueError(f"Health status term '{v}' should be from PATO or EFO ontology")
 
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name=ontology_name,
@@ -194,7 +194,7 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
             raise ValueError(f"Developmental stage term '{v}' should be from EFO or UBERON ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name=ontology_name,
@@ -224,7 +224,7 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
             raise ValueError(f"Organism part term '{v}' should be from UBERON or BTO ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name=ontology_name,

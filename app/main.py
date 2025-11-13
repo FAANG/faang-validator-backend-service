@@ -7,6 +7,7 @@ import traceback
 
 
 from app.conversions.file_processor import parse_contents_api
+from app.profiler import cprofiled
 from app.validations.unified_validator import UnifiedFAANGValidator
 
 app = FastAPI(
@@ -99,7 +100,7 @@ async def validate_data(request: ValidationRequest):
             }
         )
 
-
+@cprofiled(limit=25)
 @app.post("/validate-file")
 async def validate_file(file: UploadFile = File(...)):
     """
@@ -116,6 +117,7 @@ async def validate_file(file: UploadFile = File(...)):
         contents = await file.read()
 
         # Parse file contents - now returns all sheets
+
         records, sheet_names, error_message = parse_contents_api(contents, file.filename)
 
         if error_message:

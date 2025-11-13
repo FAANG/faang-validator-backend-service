@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from app.validations.generic_validator_classes import BreedSpeciesValidator, OntologyValidator
+from app.validations.generic_validator_classes import BreedSpeciesValidator, get_ontology_validator
 from app.validations.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
@@ -29,7 +29,7 @@ class HealthStatus(BaseModel):
         else:
             ontology_name = "PATO"
 
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=v,
             ontology_name=ontology_name,
@@ -126,7 +126,7 @@ class FAANGOrganismSample(SampleCoreMetadata):
             raise ValueError(f"Organism term '{v}' should be from NCBITaxon ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="NCBITaxon",
@@ -150,7 +150,7 @@ class FAANGOrganismSample(SampleCoreMetadata):
             raise ValueError(f"Sex term '{v}' should be from PATO ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="PATO",
@@ -174,7 +174,7 @@ class FAANGOrganismSample(SampleCoreMetadata):
             raise ValueError(f"Breed term '{v}' should be from LBO ontology")
 
         # ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="LBO",

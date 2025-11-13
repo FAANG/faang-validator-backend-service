@@ -10,7 +10,7 @@ from app.validations.validation_utils import (
 )
 from typing import Optional, Union, Literal
 from app.rulesets_pydantics.specimen_ruleset import FAANGSpecimenFromOrganismSample
-from app.validations.generic_validator_classes import OntologyValidator
+from app.validations.generic_validator_classes import get_ontology_validator
 
 
 class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
@@ -181,7 +181,7 @@ class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
             raise ValueError(f"Maturity state term '{v}' should be from PATO ontology")
 
         # PATO:0001501 (Immature) | PATO:0001701 (Mature)
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="PATO",

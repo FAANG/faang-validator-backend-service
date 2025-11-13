@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from app.validations.generic_validator_classes import OntologyValidator
+from app.validations.generic_validator_classes import get_ontology_validator
 from app.validations.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
@@ -34,7 +34,7 @@ class CellType(BaseModel):
             allowed_classes = ["BTO:0000000"]
 
         # Ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name=ontology_name,
@@ -122,7 +122,7 @@ class FAANGCellLineSample(SampleCoreMetadata):
             raise ValueError(f"Organism term '{v}' should be from NCBITaxon ontology")
 
         # Ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="NCBITaxon",
@@ -146,7 +146,7 @@ class FAANGCellLineSample(SampleCoreMetadata):
             raise ValueError(f"Sex term '{v}' should be from PATO ontology")
 
         # Ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="PATO",
@@ -170,7 +170,7 @@ class FAANGCellLineSample(SampleCoreMetadata):
             raise ValueError(f"Breed term '{v}' should be from LBO ontology")
 
         # Ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name="LBO",
@@ -201,7 +201,7 @@ class FAANGCellLineSample(SampleCoreMetadata):
             allowed_classes = ["EFO:0000408"]
 
         # Ontology validation
-        ov = OntologyValidator(cache_enabled=True)
+        ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
             ontology_name=ontology_name,

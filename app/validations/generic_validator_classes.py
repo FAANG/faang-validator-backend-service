@@ -15,6 +15,21 @@ except ImportError:
 
     ontology_warnings_context: ContextVar[List[str]] = ContextVar('ontology_warnings', default=[])
 
+# Context variable to share OntologyValidator instance during Pydantic validation
+ontology_validator_context: ContextVar[Optional['OntologyValidator']] = ContextVar('ontology_validator', default=None)
+
+
+def get_ontology_validator() -> 'OntologyValidator':
+    """
+    Get the shared OntologyValidator instance from context, or create a new one if not available.
+    This allows Pydantic validators to use the pre-fetched cache.
+    """
+    validator = ontology_validator_context.get(None)
+    if validator is None:
+        # Fallback: create a new instance if not in context (shouldn't happen during validation)
+        validator = OntologyValidator(cache_enabled=True)
+    return validator
+
 
 class ValidationResult(BaseModel):
     errors: List[str] = Field(default_factory=list)
@@ -72,7 +87,8 @@ class OntologyValidator:
     def validate_ontology_term(self, term: str, ontology_name: str,
                                allowed_classes: List[str],
                                text: str = None,
-                               field_name: str = None) -> ValidationResult:
+                               field_name: str = None,
+                               allow_fetch: bool = False) -> ValidationResult:
 
         result = ValidationResult(field_path=f"{ontology_name}:{term}")
 
@@ -80,7 +96,9 @@ class OntologyValidator:
             return result
 
         # check OLS for term validity
-        ols_data = self.fetch_from_ols(term)
+        # During Pydantic validation, allow_fetch should be False to prevent blocking HTTP calls
+        # All terms should be pre-fetched
+        ols_data = self.fetch_from_ols(term, allow_fetch=allow_fetch)
         if not ols_data:
             result.errors.append(f"Term {term} not found in OLS")
             return result
@@ -122,9 +140,15 @@ class OntologyValidator:
 
         return result
 
-    def fetch_from_ols(self, term_id: str) -> List[Dict]:
+    def fetch_from_ols(self, term_id: str, allow_fetch: bool = True) -> List[Dict]:
         if self.cache_enabled and term_id in self._cache:
             return self._cache[term_id]
+
+        # During validation, we should not make blocking HTTP calls
+        # All terms should be pre-fetched. If not in cache, return empty
+        if not allow_fetch:
+            print(f"Warning: Term {term_id} not in cache and fetching disabled. This should have been pre-fetched.")
+            return []
 
         try:
             url = f"http://www.ebi.ac.uk/ols/api/search?q={term_id.replace(':', '_')}&rows=100"
