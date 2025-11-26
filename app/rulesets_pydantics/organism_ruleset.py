@@ -24,6 +24,8 @@ class HealthStatus(BaseModel):
         if v in ["not applicable", "not collected", "not provided", "restricted access"]:
             return v
 
+        v = v.replace("_", ":")
+
         if v.startswith("EFO:"):
             ontology_name = "EFO"
         else:
@@ -63,10 +65,10 @@ class FAANGOrganismSample(SampleCoreMetadata):
         "restricted access",
         ""
     ]] = Field(None, alias="Unit", json_schema_extra={"recommended": True})
-    breed: Optional[str] = Field(None, alias="Breed", json_schema_extra={"recommended": True})
     breed_term_source_id: Optional[Union[str, Literal["not applicable", "restricted access", ""]]] = Field(None,
                                                                                                            alias="Breed Term Source ID",
                                                                                                            json_schema_extra={"recommended": True})
+    breed: Optional[str] = Field(None, alias="Breed", json_schema_extra={"recommended": True})
 
     health_status: Optional[List[HealthStatus]] = Field(None,
                                                         alias="Health Status",
