@@ -31,6 +31,7 @@ class ValidationResponse(BaseModel):
     report: Optional[str] = None
 
 
+
 class SubmissionRequest(BaseModel):
     validation_results: Dict[str, Any]
     webin_username: str
@@ -46,7 +47,10 @@ class SubmissionResponse(BaseModel):
     biosamples_ids: Optional[Dict[str, str]] = None
     submitted_count: Optional[int] = None
     errors: Optional[List[str]] = None
-
+      
+      
+class ValidationDataRequest(BaseModel):
+    data: dict[str, list[dict[str, Any]]]
 
 # Health check endpoint
 @app.get("/")
@@ -273,6 +277,47 @@ async def submit_to_biosamples(request: SubmissionRequest):
                 "type": type(e).__name__
             }
         )
+
+
+
+@cprofiled(limit=25)
+@app.post("/validate-data")
+async def validate_data(request: ValidationDataRequest):
+
+
+        print("FAANG Sample Validation")
+        print("=" * 50)
+        print(f"Supported sample types: {', '.join(validator.get_supported_types())}")
+        print()
+
+        # Check if records is empty
+        if not request.data:
+            results = []  # No records to validate
+        else:
+            # validation
+
+            print("Pre-fetching ontology terms...")
+            await validator.prefetch_all_ontology_terms_async(request.data)
+
+            print("Pre-fetching BioSample IDs...")
+            await validator.prefetch_all_biosample_ids_async(request.data)
+
+            print("Running validation...")
+            results = validator.validate_all_records(
+                request.data,
+                validate_relationships=True,
+                validate_ontology_text=True
+            )
+
+            # report
+            report = validator.generate_unified_report(results)
+            print(report)
+            return {
+                "status": "success",
+                "message": "File validated successfully",
+                "results": results,
+                "report": report
+            }
 
 
 if __name__ == "__main__":
