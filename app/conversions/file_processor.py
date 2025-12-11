@@ -260,7 +260,7 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             col = headers[i]
             val = row[i] if i < len(row) else ""
 
-            # ✅ Special handling if Health Status is in headers
+            # Special handling if Health Status is in headers
             if has_health_status and col.startswith("Health Status"):
                 # Check next column for Term Source ID
                 if i + 1 < len(headers) and "Term Source ID" in headers[i + 1]:
@@ -298,28 +298,28 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
                     i += 1
                 continue
 
-            # ✅ Special handling for Child Of headers
+            # Special handling for Child Of headers
             elif has_child_of and col.startswith("Child Of"):
                 if val:  # Only append non-empty values
                     record["Child Of"].append(val)
                 i += 1
                 continue
 
-            # ✅ Special handling for Specimen Picture URL headers
+            # Special handling for Specimen Picture URL headers
             elif has_specimen_picture_url and col.startswith("Specimen Picture URL"):
                 if val:  # Only append non-empty values
                     record["Specimen Picture URL"].append(val)
                 i += 1
                 continue
 
-            # ✅ Special handling for Derived From headers
+            # Special handling for Derived From headers
             elif has_derived_from and col.startswith("Derived From"):
                 if val:  # Only append non-empty values
                     record["Derived From"].append(val)
                 i += 1
                 continue
 
-            # ✅ Normal processing for all other columns
+            # Normal processing for all other columns
             if col in record:
                 if not isinstance(record[col], list):
                     record[col] = [record[col]]

@@ -5,7 +5,6 @@ from typing import Dict, List, Any, Optional
 import json
 import traceback
 
-
 from app.conversions.file_processor import parse_contents_api
 from app.profiler import cprofiled
 from app.validations.unified_validator import UnifiedFAANGValidator
@@ -32,9 +31,28 @@ class ValidationResponse(BaseModel):
     report: Optional[str] = None
 
 
+
+class SubmissionRequest(BaseModel):
+    validation_results: Dict[str, Any]
+    webin_username: str
+    webin_password: str
+    domain: Optional[str] = None
+    mode: str = "test"
+    update_existing: bool = False
+
+
+class SubmissionResponse(BaseModel):
+    success: bool
+    message: str
+    biosamples_ids: Optional[Dict[str, str]] = None
+    submitted_count: Optional[int] = None
+    errors: Optional[List[str]] = None
+      
+      
 class ValidationDataRequest(BaseModel):
     data: dict[str, list[dict[str, Any]]]
 
+# Health check endpoint
 @app.get("/")
 async def root():
     return {
@@ -102,52 +120,30 @@ async def validate_data(request: ValidationRequest):
             }
         )
 
+
 @cprofiled(limit=25)
 @app.post("/validate-file")
 async def validate_file(file: UploadFile = File(...)):
-    """
-    Validate an uploaded file against FAANG standards.
-
-    Args:
-        file: The file to validate
-
-    Returns:
-        dict: Validation results
-    """
     try:
-        # Read file contents
         contents = await file.read()
-
-        # Parse file contents - now returns all sheets
 
         records, sheet_names, error_message = parse_contents_api(contents, file.filename)
 
         if error_message:
             raise HTTPException(status_code=400, detail=error_message)
 
-        # Check if sheet_names is empty or None
         if not sheet_names:
             raise HTTPException(status_code=400, detail="No valid sheets found in the file.")
 
-        # For validation, we'll use the first sheet's data
-        # This maintains compatibility with the existing validation logic
-        # print(all_sheets_data)
-        # first_sheet_name = sheet_names[0]
-        # records = all_sheets_data[first_sheet_name]
-
-
-
         print("FAANG Sample Validation")
         print("=" * 50)
-        print(f"Supported sample types: {', '.join(validator.get_supported_types())}")
+        print("Supported types:", validator.get_supported_types())
         print()
 
-        # Check if records is empty
         if not records:
-            results = []  # No records to validate
+            results = {}
+            report = ""
         else:
-            # validation
-
             print("Pre-fetching ontology terms...")
             await validator.prefetch_all_ontology_terms_async(records)
 
@@ -158,20 +154,63 @@ async def validate_file(file: UploadFile = File(...)):
             results = validator.validate_all_records(
                 records,
                 validate_relationships=True,
-                validate_ontology_text=True
+                validate_ontology_text=True,
             )
 
-            # report
+            try:
+                import json
+
+                total_summary = results.get("total_summary", {}) or {}
+                print("DEBUG total_summary:", total_summary)
+
+                results_by_type = results.get("results_by_type", {}) or {}
+
+                for st, st_data in results_by_type.items():
+                    st_key = st.replace(" ", "_")
+                    valid_key = f"valid_{st_key}s"
+                    invalid_key = f"invalid_{st_key}s"
+                    if invalid_key.endswith("ss"):
+                        invalid_key = invalid_key[:-1]
+
+                    v = len(st_data.get(valid_key) or [])
+                    iv = len(st_data.get(invalid_key) or [])
+                    print(f"DEBUG type={st!r}: valid={v}, invalid={iv}")
+
+                for st, st_data in results_by_type.items():
+                    st_key = st.replace(" ", "_")
+                    invalid_key = f"invalid_{st_key}s"
+                    if invalid_key.endswith("ss"):
+                        invalid_key = invalid_key[:-1]
+
+                    invalid_rows = st_data.get(invalid_key) or []
+                    if not invalid_rows:
+                        continue
+
+                    print(f"\nDEBUG invalid rows for {st!r}: count={len(invalid_rows)}")
+                    for row in invalid_rows:
+                        print("-" * 60)
+                        print("sample_name:", row.get("sample_name"))
+                        print("errors:")
+                        print(json.dumps(row.get("errors"), indent=2, ensure_ascii=False))
+                        print("warnings:", row.get("warnings"))
+                        data = row.get("data") or {}
+                        print("data keys:", list(data.keys()))
+                        print()
+            except Exception as dbg_e:
+                print("DEBUG printing failed:", dbg_e)
+
             report = validator.generate_unified_report(results)
 
-            return {
-                "status": "success",
-                "filename": file.filename,
-                "message": "File validated successfully",
-                "results": results,
-                "report": report
-            }
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "message": "File validated successfully",
+            "results": results,
+            "report": report,
+        }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error during validation: {str(e)}")
         traceback.print_exc()
@@ -180,11 +219,9 @@ async def validate_file(file: UploadFile = File(...)):
             detail={
                 "error": "Validation failed",
                 "message": str(e),
-                "type": type(e).__name__
-            }
+                "type": type(e).__name__,
+            },
         )
-
-
 
 
 @app.get("/export-valid-samples")
@@ -192,6 +229,54 @@ async def export_valid_samples_endpoint():
     return {
         "message": "Use POST /validate endpoint first, then access results.biosample_exports from the response"
     }
+
+
+@app.post("/submit-to-biosamples", response_model=SubmissionResponse)
+async def submit_to_biosamples(request: SubmissionRequest):
+    try:
+        if request.mode not in ['test', 'prod']:
+            raise HTTPException(
+                status_code=400,
+                detail="Mode must be 'test' or 'prod'"
+            )
+
+        print(f"Submitting to BioSamples via Webin: mode={request.mode}")
+
+        result = validator.submit_to_biosamples(
+            validation_results=request.validation_results,
+            webin_username=request.webin_username,
+            webin_password=request.webin_password,
+            domain=None,
+            mode=request.mode,
+            update_existing=request.update_existing
+        )
+
+        if result['success']:
+            return SubmissionResponse(
+                success=True,
+                message=f"Successfully submitted {result['submitted_count']} samples to BioSamples",
+                biosamples_ids=result['biosamples_ids'],
+                submitted_count=result['submitted_count'],
+                errors=result.get('errors', [])
+            )
+        else:
+            return SubmissionResponse(
+                success=False,
+                message="Submission failed",
+                errors=result.get('errors', [result.get('error', 'Unknown error')])
+            )
+
+    except Exception as e:
+        print(f"Error during submission: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Submission failed",
+                "message": str(e),
+                "type": type(e).__name__
+            }
+        )
 
 
 
@@ -234,6 +319,8 @@ async def validate_data(request: ValidationDataRequest):
                 "report": report
             }
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
