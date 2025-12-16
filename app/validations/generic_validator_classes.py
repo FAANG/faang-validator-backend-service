@@ -6,14 +6,8 @@ import aiohttp
 import re
 
 from app.validations.constants import SPECIES_BREED_LINKS, ALLOWED_RELATIONSHIPS, ELIXIR_VALIDATOR_URL
-
-# import context variable from base_validator
-try:
-    from base_validator import ontology_warnings_context
-except ImportError:
-    from contextvars import ContextVar
-
-    ontology_warnings_context: ContextVar[List[str]] = ContextVar('ontology_warnings', default=[])
+from contextvars import ContextVar
+from app.validations.base_validator import ontology_warnings_context
 
 # Context variable to share OntologyValidator instance during Pydantic validation
 ontology_validator_context: ContextVar[Optional['OntologyValidator']] = ContextVar('ontology_validator', default=None)
@@ -84,11 +78,6 @@ class OntologyValidator:
         self.cache_enabled = cache_enabled
         self._cache: Dict[str, Any] = {}
 
-    def normalize_term_id(self: str) -> str:
-        if self and '_' in self and ':' not in self:
-            return self.replace('_', ':', 1)
-        return self
-
     def validate_ontology_term(self, term: str, ontology_name: str,
                                allowed_classes: List[str],
                                text: str = None,
@@ -146,28 +135,23 @@ class OntologyValidator:
         return result
 
     def fetch_from_ols(self, term_id: str, allow_fetch: bool = True) -> List[Dict]:
-
         if self.cache_enabled and term_id in self._cache:
-            cached = self._cache[term_id]
-            if cached:
-                return cached
-            if not allow_fetch:
-                return cached
+            return self._cache[term_id]
 
+        # During validation, we should not make blocking HTTP calls
+        # All terms should be pre-fetched. If not in cache, return empty
         if not allow_fetch:
             print(f"Warning: Term {term_id} not in cache and fetching disabled. This should have been pre-fetched.")
             return []
 
         try:
+            print(term_id)
             url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
+
             docs = data.get('response', {}).get('docs', [])
-
-            if 'LBO' in term_id:
-                print('docs', term_id, docs)
-
             if self.cache_enabled:
                 self._cache[term_id] = docs
             return docs
@@ -180,7 +164,8 @@ class OntologyValidator:
             return term_id, self._cache[term_id]
 
         try:
-            url = f"http://www.ebi.ac.uk/ols4/api/search?q={term_id.replace('_', ':')}&rows=100"
+            print(term_id)
+            url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                 response.raise_for_status()
                 data = await response.json()

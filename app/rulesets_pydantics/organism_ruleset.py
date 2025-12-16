@@ -24,16 +24,20 @@ class HealthStatus(BaseModel):
         if v in ["not applicable", "not collected", "not provided", "restricted access"]:
             return v
 
-        v = v.replace("_", ":")
+        # Strip whitespace before normalizing
+        v = v.strip() if isinstance(v, str) else v
+        
+        # Normalize the term (convert underscore to colon)
+        term = normalize_ontology_term(v)
 
-        if v.startswith("EFO:"):
+        if term.startswith("EFO:"):
             ontology_name = "EFO"
         else:
             ontology_name = "PATO"
 
         ov = get_ontology_validator()
         res = ov.validate_ontology_term(
-            term=v,
+            term=term,
             ontology_name=ontology_name,
             allowed_classes=["PATO:0000461", "EFO:0000408"],
             text=info.data.get('text'),
@@ -65,9 +69,12 @@ class FAANGOrganismSample(SampleCoreMetadata):
         "restricted access",
         ""
     ]] = Field(None, alias="Unit", json_schema_extra={"recommended": True})
-    breed_term_source_id: Optional[Union[str, Literal["not applicable", "restricted access", ""]]] = Field(None,
-                                                                                                           alias="Breed Term Source ID",
-                                                                                                           json_schema_extra={"recommended": True})
+    # Declare term source ID before breed so validators see it in info.data
+    breed_term_source_id: Optional[Union[str, Literal["not applicable", "restricted access", ""]]] = Field(
+        None,
+        alias="Breed Term Source ID",
+        json_schema_extra={"recommended": True}
+    )
     breed: Optional[str] = Field(None, alias="Breed", json_schema_extra={"recommended": True})
 
     health_status: Optional[List[HealthStatus]] = Field(None,
@@ -219,7 +226,8 @@ class FAANGOrganismSample(SampleCoreMetadata):
         breed_term = values.get('Breed Term Source ID') or values.get('breed_term_source_id')
 
         # check if breed is provided without breed_term_source_id
-        if v and v.strip() and not breed_term:
+        # Also check if breed_term is empty string (not just None)
+        if v and v.strip() and (not breed_term or (isinstance(breed_term, str) and not breed_term.strip())):
             raise ValueError(f"Breed '{v}' is provided but Breed Term Source ID is missing")
 
         # check if breed_term_source_id is provided without breed text
