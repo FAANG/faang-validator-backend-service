@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Dict, List, Any, Optional, get_args, get_origin, Union
 from pydantic import BaseModel
-from pydantic_core import PydanticUndefined
 
 from app.profiler import cprofiled
 from app.validations.teleostei_embryo_validator import TeleosteiEmbryoValidator
@@ -25,28 +24,35 @@ from app.validations.webin_submission import WebinBioSamplesSubmission
 
 def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> BaseModel:
     """
-    Reconstruct a Pydantic model from a dict, including nested models.
-    Uses model_construct for the main model and recursively constructs nested models.
+    Reconstruct a Pydantic model from a dict without validation.
+    Recursively handles nested models and lists of models.
+    Uses model_construct to avoid re-validation (data was already validated).
     Handles field aliases by converting them to field names.
     """
     if not isinstance(data, dict):
         return data
-    
-    # Get all model fields including parent class fields
-    # In Pydantic v2, model_fields includes fields from parent classes
+
+    # Get all model fields
     all_fields = model_class.model_fields
+    print('data is dict', model_class, '\n\n\n')
     
-    # Convert aliases to field names if needed
-    # Pydantic model_construct expects field names, not aliases
-    normalized_data = {}
+    # Build alias to field name mapping
     alias_to_field = {}
     for field_name, field_info in all_fields.items():
-        if hasattr(field_info, 'alias') and field_info.alias:
-            alias_to_field[field_info.alias] = field_name
+        # Check for alias (can be string or AliasInfo)
+        alias = getattr(field_info, 'alias', None)
+        if alias:
+            alias_to_field[alias] = field_name
+        # Also check serialization_alias
+        serialization_alias = getattr(field_info, 'serialization_alias', None)
+        if serialization_alias:
+            alias_to_field[serialization_alias] = field_name
     
+    # Normalize data: convert aliases to field names
+    normalized_data = {}
     for key, value in data.items():
-        # Check if key is an alias
         if key in alias_to_field:
+            # Key is an alias, use field name
             normalized_data[alias_to_field[key]] = value
         elif key in all_fields:
             # Key is already a field name
@@ -55,164 +61,60 @@ def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> Ba
             # Unknown key, keep as-is (might be extra data)
             normalized_data[key] = value
     
-    data = normalized_data
-    
-    # Get model fields to identify nested models
+    # Process each field
     constructed_data = {}
     for field_name, field_info in all_fields.items():
-        if field_name in data:
-            value = data[field_name]
-            
-            # Skip PydanticUndefined values
-            if value is PydanticUndefined:
-                continue
-                
+        if field_name in normalized_data:
+            value = normalized_data[field_name]
             field_annotation = field_info.annotation
-            # Skip if annotation is PydanticUndefined
-            if field_annotation is PydanticUndefined:
-                constructed_data[field_name] = value
-                continue
+            
+            # Handle Optional types (Union[T, None])
+            origin = get_origin(field_annotation)
+            if origin is Union:
+                args = get_args(field_annotation)
+                # Find the non-None type from Union
+                inner_type = next((t for t in args if t is not type(None)), None)
+                if inner_type:
+                    field_annotation = inner_type
+                    origin = get_origin(field_annotation)
             
             # Handle list of nested models
             if isinstance(value, list):
-                # Check if this field is a list of models
-                try:
-                    origin = get_origin(field_annotation)
-                    
-                    # Handle Optional types (which are Union[T, None])
-                    if origin is Union:
-                        args = get_args(field_annotation)
-                        # Find the non-None type from Union
-                        inner_type = next((t for t in args if t is not type(None)), None)
-                        if inner_type:
-                            field_annotation = inner_type
-                            origin = get_origin(field_annotation)
-                    
-                    if origin is list or (hasattr(origin, '__name__') and origin.__name__ == 'List'):
-                        args = get_args(field_annotation)
-                        if args and len(args) > 0:
-                            inner_type = args[0]
-                            # Handle Union types within list (e.g., Union[str, BaseModel])
-                            inner_origin = get_origin(inner_type)
-                            if inner_origin is Union:
-                                # Extract BaseModel from Union if present
-                                union_args = get_args(inner_type)
-                                inner_type = next((t for t in union_args if isinstance(t, type) and issubclass(t, BaseModel)), None)
-                            
-                            if inner_type and isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
-                                constructed_data[field_name] = [
-                                    _reconstruct_model_from_dict(inner_type, item) if isinstance(item, dict) and not isinstance(item, BaseModel) else item
-                                    for item in value
-                                ]
-                            else:
-                                constructed_data[field_name] = value
+                if origin is list or (hasattr(origin, '__name__') and origin.__name__ == 'List'):
+                    args = get_args(field_annotation)
+                    if args and len(args) > 0:
+                        inner_type = args[0]
+                        # Handle Union types within list
+                        inner_origin = get_origin(inner_type)
+                        if inner_origin is Union:
+                            union_args = get_args(inner_type)
+                            inner_type = next((t for t in union_args if isinstance(t, type) and issubclass(t, BaseModel)), None)
+                        
+                        if inner_type and isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
+                            constructed_data[field_name] = [
+                                _reconstruct_model_from_dict(inner_type, item) if isinstance(item, dict) else item
+                                for item in value
+                            ]
                         else:
                             constructed_data[field_name] = value
                     else:
                         constructed_data[field_name] = value
-                except (TypeError, AttributeError) as e:
-                    # If we can't determine the type, just use the value as-is
+                else:
                     constructed_data[field_name] = value
             # Handle single nested model
-            elif isinstance(value, dict) and not isinstance(value, BaseModel):
-                # Check if this field is a model
-                # Handle Optional types (which are Union[T, None])
-                origin = get_origin(field_annotation)
-                if origin is Union:
-                    args = get_args(field_annotation)
-                    # Find the non-None type from Union
-                    inner_type = next((t for t in args if t is not type(None)), None)
-                    if inner_type:
-                        field_annotation = inner_type
-                
+            elif isinstance(value, dict):
                 if isinstance(field_annotation, type) and issubclass(field_annotation, BaseModel):
                     constructed_data[field_name] = _reconstruct_model_from_dict(field_annotation, value)
                 else:
                     constructed_data[field_name] = value
             else:
-                # Simple value (str, int, float, bool, etc.) - just use it as-is
+                # Simple value - use as-is
                 constructed_data[field_name] = value
-        else:
-            # Field not in data, use default if available
-            # Skip if default is PydanticUndefined (field is required or has no default)
-            if hasattr(field_info, 'default') and field_info.default is not PydanticUndefined:
-                try:
-                    # Check if default is callable (default_factory)
-                    if callable(field_info.default):
-                        constructed_data[field_name] = field_info.default()
-                    else:
-                        constructed_data[field_name] = field_info.default
-                except (TypeError, AttributeError):
-                    # Skip if we can't determine the default
-                    pass
     
-    # Also include any fields from data that might not be in model_fields (e.g., from parent classes)
-    # This ensures we don't miss any fields, but we need to check if they are nested models
-    for key, value in data.items():
-        if key not in constructed_data and value is not PydanticUndefined:
-            # Check if this field should be a nested model by looking at the field info
-            if key in all_fields:
-                field_info = all_fields[key]
-                field_annotation = field_info.annotation
-                
-                # Handle list of nested models
-                if isinstance(value, list):
-                    try:
-                        origin = get_origin(field_annotation)
-                        
-                        # Handle Optional types (which are Union[T, None])
-                        if origin is Union:
-                            args = get_args(field_annotation)
-                            # Find the non-None type from Union
-                            inner_type = next((t for t in args if t is not type(None)), None)
-                            if inner_type:
-                                field_annotation = inner_type
-                                origin = get_origin(field_annotation)
-                        
-                        if origin is list or (hasattr(origin, '__name__') and origin.__name__ == 'List'):
-                            args = get_args(field_annotation)
-                            if args and len(args) > 0:
-                                inner_type = args[0]
-                                # Handle Union types within list (e.g., Union[str, BaseModel])
-                                inner_origin = get_origin(inner_type)
-                                if inner_origin is Union:
-                                    # Extract BaseModel from Union if present
-                                    union_args = get_args(inner_type)
-                                    inner_type = next((t for t in union_args if isinstance(t, type) and issubclass(t, BaseModel)), None)
-                                
-                                if inner_type and isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
-                                    constructed_data[key] = [
-                                        _reconstruct_model_from_dict(inner_type, item) if isinstance(item, dict) and not isinstance(item, BaseModel) else item
-                                        for item in value
-                                    ]
-                                else:
-                                    constructed_data[key] = value
-                            else:
-                                constructed_data[key] = value
-                        else:
-                            constructed_data[key] = value
-                    except (TypeError, AttributeError):
-                        constructed_data[key] = value
-                # Handle single nested model
-                elif isinstance(value, dict) and not isinstance(value, BaseModel):
-                    # Handle Optional types (which are Union[T, None])
-                    origin = get_origin(field_annotation)
-                    if origin is Union:
-                        args = get_args(field_annotation)
-                        # Find the non-None type from Union
-                        inner_type = next((t for t in args if t is not type(None)), None)
-                        if inner_type:
-                            field_annotation = inner_type
-                    
-                    if isinstance(field_annotation, type) and issubclass(field_annotation, BaseModel):
-                        constructed_data[key] = _reconstruct_model_from_dict(field_annotation, value)
-                    else:
-                        constructed_data[key] = value
-                else:
-                    constructed_data[key] = value
-            else:
-                # Field not in model_fields, just use as-is
-                constructed_data[key] = value
+    # Include any extra fields from normalized_data that might not be in model_fields
+    for key, value in normalized_data.items():
+        if key not in constructed_data:
+            constructed_data[key] = value
     
     return model_class.model_construct(**constructed_data)
 
@@ -493,24 +395,24 @@ class UnifiedFAANGValidator:
                             org_name = org_sample.get('sample_name')
                             org_model = org_sample.get('model')
                             if org_name and org_model:
+                                # If model is a dict (serialized), convert it back to Pydantic model
+                                # Use recursive reconstruction to handle nested models without re-validation
                                 if isinstance(org_model, dict):
                                     org_validator = self.validators.get('organism')
                                     if org_validator:
-                                        org_model = _reconstruct_model_from_dict(org_validator.get_model_class(), org_model)
+                                        model_class = org_validator.get_model_class()
+                                        org_model = _reconstruct_model_from_dict(model_class, org_model)
                                 organism_samples[org_name] = org_model
 
                 for idx, valid_sample in enumerate(results[valid_samples_key]):
                     sample_name_export = valid_sample.get('sample_name')
                     try:
                         model = valid_sample.get('model')
-                    
-                        # If model is a dict (serialized), convert it back to model instance
-                        # Use recursive reconstruction to handle nested models (CellType, HealthStatus, etc.)
+                        # If model is a dict (serialized), convert it back to Pydantic model
+                        # Use recursive reconstruction to handle nested models without re-validation
                         if isinstance(model, dict):
                             model_class = validator.get_model_class()
-                            # Reconstruct model with nested models without re-validation
                             model = _reconstruct_model_from_dict(model_class, model)
-                        
                         biosample_data = validator.export_to_biosample_format(model)
                         
                         # For specimen and pool samples, if organism/species are missing, try to get from parent organism
@@ -557,6 +459,12 @@ class UnifiedFAANGValidator:
                                         # Get from organism sample
                                         if parent_name in organism_samples:
                                             parent_model = organism_samples[parent_name]
+                                            # Ensure parent_model is a Pydantic model, not a dict
+                                            if isinstance(parent_model, dict):
+                                                org_validator = self.validators.get('organism')
+                                                if org_validator:
+                                                    model_class = org_validator.get_model_class()
+                                                    parent_model = _reconstruct_model_from_dict(model_class, parent_model)
                                             if hasattr(parent_model, 'organism') and hasattr(parent_model, 'organism_term_source_id'):
                                                 from app.validations.organism_validator import OrganismValidator
                                                 org_validator = OrganismValidator()
@@ -577,10 +485,13 @@ class UnifiedFAANGValidator:
                                                     found_specimen = True
                                                     print(f"  Found parent specimen: {parent_name}")
                                                     spec_model = spec_sample.get('model')
+                                                    # If model is a dict (serialized), convert it back to Pydantic model
+                                                    # Use recursive reconstruction to handle nested models without re-validation
                                                     if isinstance(spec_model, dict):
-                                                        spec_validator = self.validators.get('specimen_from_organism')
+                                                        spec_validator = self.validators.get('specimen from organism') or self.validators.get('specimen_from_organism')
                                                         if spec_validator:
-                                                            spec_model = _reconstruct_model_from_dict(spec_validator.get_model_class(), spec_model)
+                                                            model_class = spec_validator.get_model_class()
+                                                            spec_model = _reconstruct_model_from_dict(model_class, spec_model)
                                                     
                                                     # Get organism from specimen's parent
                                                     spec_data = spec_sample.get('data', {})
@@ -603,6 +514,12 @@ class UnifiedFAANGValidator:
                                                     if spec_parent_name and spec_parent_name in organism_samples:
                                                         print(f"  Found parent organism: {spec_parent_name}")
                                                         parent_model = organism_samples[spec_parent_name]
+                                                        # Ensure parent_model is a Pydantic model, not a dict
+                                                        if isinstance(parent_model, dict):
+                                                            org_validator = self.validators.get('organism')
+                                                            if org_validator:
+                                                                model_class = org_validator.get_model_class()
+                                                                parent_model = _reconstruct_model_from_dict(model_class, parent_model)
                                                         if hasattr(parent_model, 'organism') and hasattr(parent_model, 'organism_term_source_id'):
                                                             from app.validations.organism_validator import OrganismValidator
                                                             org_validator = OrganismValidator()
