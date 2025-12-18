@@ -234,6 +234,7 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
     Build JSON structure from processed headers and rows.
     Only include 'Health Status' if it exists in the headers.
     Always treat 'Child Of', 'Specimen Picture URL', and 'Derived From' as lists.
+    Also handles experiment and analysis specific fields.
     """
     grouped_data = []
     has_health_status = any(h.startswith("Health Status") for h in headers)
@@ -241,6 +242,12 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
     has_child_of = any(h == "Child Of" for h in headers)
     has_specimen_picture_url = any(h == "Specimen Picture URL" for h in headers)
     has_derived_from = any(h == "Derived From" for h in headers)
+    # Experiment fields
+    has_chip_target = any(h.lower().startswith("chip target") for h in headers)
+    has_experiment_target = any(h.lower().startswith("experiment target") for h in headers)
+    # Analysis fields
+    has_experiment_type = any(h.startswith("experiment type") for h in headers)
+    has_platform = any(h.startswith("platform") for h in headers)
 
     for row in rows:
         record: Dict[str, Any] = {}
@@ -254,6 +261,14 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             record["Specimen Picture URL"] = []
         if has_derived_from:
             record["Derived From"] = []
+        if has_chip_target:
+            record["chip target"] = {}
+        if has_experiment_target:
+            record["experiment target"] = {}
+        if has_experiment_type:
+            record["experiment type"] = []
+        if has_platform:
+            record["platform"] = []
 
         i = 0
         while i < len(headers):
@@ -316,6 +331,65 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             elif has_derived_from and col.startswith("Derived From"):
                 if val:  # Only append non-empty values
                     record["Derived From"].append(val)
+                i += 1
+                continue
+
+            # Special handling for chip target (experiment field)
+            elif has_chip_target and col.startswith("chip target"):
+                # Check next column for Term Source ID or Term
+                if i + 1 < len(headers) and ("Term Source ID" in headers[i + 1] or "Term" in headers[i + 1]):
+                    term_val = row[i + 1] if i + 1 < len(row) else ""
+                    record["chip target"] = {
+                        "text": val,
+                        "term": term_val
+                    }
+                    i += 2
+                else:
+                    # If only text is provided, set term to empty
+                    if val:
+                        record["chip target"] = {
+                            "text": val,
+                            "term": ""
+                        }
+                    i += 1
+                continue
+
+            # Special handling for experiment target (experiment field)
+            elif has_experiment_target and col.lower().startswith("experiment target"):
+                # Check next column for Term Source ID or Term
+                if i + 1 < len(headers) and ("Term Source ID" in headers[i + 1] or "Term" in headers[i + 1]):
+                    term_val = row[i + 1] if i + 1 < len(row) else ""
+                    record["Experiment Target"] = {
+                        "text": val,
+                        "term": term_val
+                    }
+                    i += 2
+                else:
+                    # If only text is provided, set term to empty
+                    if val:
+                        record["Experiment Target"] = {
+                            "text": val,
+                            "term": ""
+                        }
+                    i += 1
+                continue
+            
+            # Skip "Term Source ID" if it's already processed as part of experiment target
+            elif col == "Term Source ID" and "Experiment Target" in record:
+                i += 1
+                continue
+
+            # Special handling for experiment type (analysis field - array of objects)
+            elif has_experiment_type and col.startswith("experiment type"):
+                if val:  # Only append non-empty values
+                    record["experiment type"].append({"value": val})
+                i += 1
+                continue
+
+            # Special handling for platform (analysis field - array of objects)
+            elif has_platform and col.startswith("platform"):
+                if val:  # Only append non-empty values
+                    record["platform"].append({"value": val})
                 i += 1
                 continue
 

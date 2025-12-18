@@ -157,47 +157,6 @@ async def validate_file(file: UploadFile = File(...)):
                 validate_ontology_text=True,
             )
 
-            try:
-                import json
-
-                total_summary = results.get("total_summary", {}) or {}
-                print("DEBUG total_summary:", total_summary)
-
-                results_by_type = results.get("results_by_type", {}) or {}
-
-                for st, st_data in results_by_type.items():
-                    st_key = st.replace(" ", "_")
-                    valid_key = f"valid_{st_key}s"
-                    invalid_key = f"invalid_{st_key}s"
-                    if invalid_key.endswith("ss"):
-                        invalid_key = invalid_key[:-1]
-
-                    v = len(st_data.get(valid_key) or [])
-                    iv = len(st_data.get(invalid_key) or [])
-                    print(f"DEBUG type={st!r}: valid={v}, invalid={iv}")
-
-                for st, st_data in results_by_type.items():
-                    st_key = st.replace(" ", "_")
-                    invalid_key = f"invalid_{st_key}s"
-                    if invalid_key.endswith("ss"):
-                        invalid_key = invalid_key[:-1]
-
-                    invalid_rows = st_data.get(invalid_key) or []
-                    if not invalid_rows:
-                        continue
-
-                    print(f"\nDEBUG invalid rows for {st!r}: count={len(invalid_rows)}")
-                    for row in invalid_rows:
-                        print("-" * 60)
-                        print("sample_name:", row.get("sample_name"))
-                        print("errors:")
-                        print(json.dumps(row.get("errors"), indent=2, ensure_ascii=False))
-                        print("warnings:", row.get("warnings"))
-                        data = row.get("data") or {}
-                        print("data keys:", list(data.keys()))
-                        print()
-            except Exception as dbg_e:
-                print("DEBUG printing failed:", dbg_e)
 
             report = validator.generate_unified_report(results)
 
@@ -283,11 +242,13 @@ async def submit_to_biosamples(request: SubmissionRequest):
 @cprofiled(limit=25)
 @app.post("/validate-data")
 async def validate_data(request: ValidationDataRequest):
-
-
-        print("FAANG Sample Validation")
+        print("FAANG Validation")
         print("=" * 50)
-        print(f"Supported sample types: {', '.join(validator.get_supported_types())}")
+        supported_types = validator.get_supported_types()
+        print(f"Supported sample types: {', '.join(supported_types.get('sample_types', []))}")
+        print(f"Supported experiment types: {', '.join(supported_types.get('experiment_types', []))}")
+        print(f"Supported analysis types: {', '.join(supported_types.get('analysis_types', []))}")
+        print(f"Supported metadata types: {', '.join(supported_types.get('metadata_types', []))}")
         print()
 
         # Check if records is empty
@@ -312,6 +273,7 @@ async def validate_data(request: ValidationDataRequest):
             # report
             report = validator.generate_unified_report(results)
             print(report)
+            
             return {
                 "status": "success",
                 "message": "File validated successfully",

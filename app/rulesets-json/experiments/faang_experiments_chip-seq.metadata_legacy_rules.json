@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Ruleset for assay type is 'ChIP-seq'.",
+  "title": "FAANG experiment metadata rules for 'ChIP-seq'",
+  "name": "faang_experiments_chip-seq.metadata_legacy_rules",
+  "$async": true,
+  "type": "object",
+  "required": [
+    "experiment_target"
+  ],
+  "properties": {
+    "describedBy": {
+      "const": "https://github.com/FAANG/faang-metadata/blob/master/docs/faang_experiment_metadata.md"
+    },
+    "schema_version": {
+      "description": "The version number of the schema in major.minor.patch format.",
+      "type": "string",
+      "pattern": "^[0-9]{1,}.[0-9]{1,}.[0-9]{1,}$",
+      "example": "4.6.1"
+    },
+    "experiments_core": {
+      "description": "Core experiments-level information.",
+      "type": "object",
+      "$ref": "core/experiments/faang_experiments_core.metadata_legacy_rules.json"
+    },
+    "dna-binding_proteins": {
+      "description": "Dna-binding proteins information.",
+      "type": "object",
+      "$ref": "module/experiments/faang_experiments_chip-seq_dna-binding_proteins.metadata_legacy_rules.json"
+    },
+    "input_dna": {
+      "description": "Input DNA information.",
+      "type": "object",
+      "$ref": "module/experiments/faang_experiments_chip-seq_input_dna.metadata_legacy_rules.json"
+    },
+    "experiment_target": {
+      "type": "object",
+      "name": "experiment target",
+      "description": "What the experiment was trying to find, list the text rather than ontology link e.g. 'input DNA'. If the target is unknown, use 'Unknown'. For transcription factor, use 'TF_binding_site'; For chromatin, use 'histone_modification'. ChIP-seq input: use 'input DNA'.",
+      "required": ["text", "term"],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "term": {
+          "type": "string",
+          "enum": [
+            "SO:0001700",
+            "SO:0000235",
+            "EFO:0005031",
+            "NCIT:C17998",
+            "restricted access"
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        },
+        "ontology_name": {
+          "type": "string",
+          "enum": ["SO", "SO", "EFO", "NCIT"]
+        }
+      }
+    },
+    "chip_protocol": {
+      "type": "object",
+      "name": "chip protocol",
+      "description": "Link to the ChIP protocol used.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "string",
+              "enum": [
+                "not applicable",
+                "not collected",
+                "not provided",
+                "restricted access"
+              ]
+            }
+          ]
+        },
+        "mandatory": {
+          "const": "recommended"
+        }
+      }
+    }
+  }
+}
