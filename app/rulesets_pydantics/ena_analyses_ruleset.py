@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Union, Literal, Optional
 from app.validations.validation_utils import (
-    validate_date_format,
-    strip_and_convert_empty_to_none
+    validate_date_format
+
 )
 
 
@@ -55,17 +55,6 @@ class FileTypeItem(BaseModel):
             return v['value']
         return v
 
-
-class AnalysisDate(BaseModel):
-    """Model for analysis date with value and units."""
-    value: str = Field(..., alias="value")
-    units: Literal["YYYY-MM-DD", "YYYY-MM", "YYYY"] = Field(..., alias="units")
-
-    @field_validator('value')
-    def validate_date_format(cls, v):
-        return validate_date_format(v)
-
-
 class FAANGENAAnalysis(BaseModel):
     """
     Pydantic model for ENA (European Nucleotide Archive) analysis metadata.
@@ -74,7 +63,7 @@ class FAANGENAAnalysis(BaseModel):
     # required fields
     alias: str = Field(
         ...,
-        alias="alias",
+        alias="Alias",
         description="The alias of the analysis."
     )
     analysis_type: Literal[
@@ -94,78 +83,86 @@ class FAANGENAAnalysis(BaseModel):
         "restricted access"
     ] = Field(
         ...,
-        alias="analysis type",
+        alias="Analysis Type",
         description="The type of analysis performed."
     )
     study: str = Field(
         ...,
-        alias="study",
+        alias="Study",
         description="Identifies the parent study."
     )
     file_names: List[StringValueItem] = Field(
         ...,
-        alias="file names",
+        alias="File Names",
         description="The names of the files associated with this analysis."
     )
     file_types: List[FileTypeItem] = Field(
         ...,
-        alias="file types",
+        alias="File Types",
         description="The types of the files associated with this analysis."
     )
     checksum_methods: List[StringValueItem] = Field(
         ...,
-        alias="checksum methods",
+        alias="Checksum Methods",
         description="The checksum methods used on the files."
     )
     checksums: List[StringValueItem] = Field(
         ...,
-        alias="checksums",
+        alias="Checksums",
         description="The checksum values of the files."
     )
 
     # recommended fields
     title: Optional[str] = Field(
         None,
-        alias="title",
+        alias="Title",
         description="The title of the analysis.",
         json_schema_extra={"recommended": True}
     )
     description: Optional[str] = Field(
         None,
-        alias="description",
+        alias="Description",
         description="Describes the analysis in detail.",
         json_schema_extra={"recommended": True}
     )
     samples: Optional[List[StringValueItem]] = Field(
         None,
-        alias="samples",
+        alias="Samples",
         description="One or more samples associated with the analysis."
     )
     experiments: Optional[List[StringValueItem]] = Field(
         None,
-        alias="experiments",
+        alias="Experiments",
         description="One or more experiments associated with the analysis."
     )
     runs: Optional[List[StringValueItem]] = Field(
         None,
-        alias="runs",
+        alias="Runs",
         description="One or more runs associated with the analysis."
     )
     related_analyses: Optional[List[StringValueItem]] = Field(
         None,
-        alias="related analyses",
+        alias="Related Analyses",
         description="One or more analyses associated with the analysis."
     )
     analysis_center: Optional[str] = Field(
         None,
-        alias="analysis center",
+        alias="Analysis Center",
         description="The center name of the institution responsible for this analysis."
     )
-    analysis_date: Optional[AnalysisDate] = Field(
-        None,
-        alias="analysis date",
-        description="The date when this analysis was produced."
-    )
+
+    analysis_date: Optional[str] = Field(None, alias="Analysis Date", json_schema_extra={"recommended": True})
+    unit: Optional[Literal[
+        "YYYY-MM-DD",
+        "YYYY-MM",
+        "YYYY",
+        "not applicable",
+        "not collected",
+        "not provided",
+        "restricted access",
+        ""
+    ]] = Field(None, alias="Unit", json_schema_extra={"recommended": True})
+
 
     @field_validator('alias', 'analysis_type', 'study', mode='before')
     def validate_object_value(cls, v):

@@ -23,14 +23,14 @@ class ExperimentCoreMetadata(BaseModel):
         "Holoruminant",
         "USPIGFAANG"
     ]] = Field(None, alias="Secondary Project")
-    
+
     @field_validator('secondary_project', mode='before')
     @classmethod
     def validate_secondary_project(cls, v):
-        # Convert empty strings to None
-        if v == "" or v is None:
+        if not v or v.strip() == "":
             return None
         return v
+
     assay_type: Optional[str] = Field(None, alias="Assay Type")
     sample_storage: Optional[str] = Field(None, alias="Sample Storage")
     sample_storage_processing: Optional[str] = Field(None, alias="Sample Storage Processing")
@@ -52,8 +52,9 @@ class ExperimentCoreMetadata(BaseModel):
     sequencing_location_latitude_unit: Optional[str] = Field(None, alias="Sequencing Location Latitude Unit")
     sequencing_date: Optional[str] = Field(None, alias="Sequencing Date")
     sequencing_date_unit: Optional[str] = Field(None, alias="Sequencing Date Unit")
-    
-    class Config:
+
+
+class Config:
         populate_by_name = True
         validate_default = True
         validate_assignment = True

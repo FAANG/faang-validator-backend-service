@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Union, Literal, Optional
-from app.validations.validation_utils import strip_and_convert_empty_to_none
+
 
 
 class ExperimentTypeItem(BaseModel):
@@ -94,23 +94,23 @@ class FAANGEVAAnalysis(BaseModel):
     # required fields
     experiment_type: List[ExperimentTypeItem] = Field(
         ...,
-        alias="experiment type",
+        alias="Experiment Type",
         description="The type of experiment."
     )
     program: str = Field(
         ...,
-        alias="program",
+        alias="Program",
         description="The programs/tools used in the analysis separated by commas.",
         json_schema_extra={"recommended": True}
     )
     platform: List[PlatformItem] = Field(
         ...,
-        alias="platform",
+        alias="Platform",
         description="The platform(s) used to do the sequencing separated by commas."
     )
     special_analysis_type: Optional[Literal["imputation analysis", "phasing analysis"]] = Field(
         None,
-        alias="special analysis type",
+        alias="Special Analysis Type",
         description="Indicates the special type of analysis, e.g. imputation analysis, phasing analysis."
     )
 

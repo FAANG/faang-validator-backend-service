@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator, HttpUrl
 from typing import List, Union, Literal, Optional
-from app.validations.validation_utils import strip_and_convert_empty_to_none
+from app.validations.validation_utils import strip_and_convert_empty_to_none, validate_protocol_url
 
 
 class SecondaryProjectItem(BaseModel):
@@ -33,7 +33,7 @@ class FAANGFAANGAnalysis(BaseModel):
     # required fields
     project: Literal["FAANG", "restricted access"] = Field(
         ...,
-        alias="project",
+        alias="Project",
         description="State that the project is 'FAANG'."
     )
     assay_type: Literal[
@@ -53,35 +53,35 @@ class FAANGFAANGAnalysis(BaseModel):
         "restricted access"
     ] = Field(
         ...,
-        alias="assay type",
+        alias="Assay Type",
         description="The type of experiment analysis data was derived from."
     )
-    analysis_protocol: Union[HttpUrl, Literal["restricted access"]] = Field(
+    analysis_protocol: Union[str, Literal["restricted access"]] = Field(
         ...,
-        alias="analysis protocol",
+        alias="Analysis Protocol",
         description="Link to the description of the analysis protocol."
     )
 
     # required fields (alias has mandatory: "mandatory" in JSON)
     alias: str = Field(
         ...,
-        alias="alias",
+        alias="Alias",
         description="The alias of the analysis."
     )
     secondary_project: Optional[List[SecondaryProjectItem]] = Field(
         None,
-        alias="secondary project",
+        alias="Secondary Project",
         description="State the secondary project(s) that this data belongs to."
     )
     analysis_code: Optional[Union[HttpUrl, Literal["restricted access"]]] = Field(
         None,
-        alias="analysis code",
+        alias="Analysis Code",
         description="Link to the repository that contains the code used in the analysis.",
         json_schema_extra={"recommended": True}
     )
     analysis_code_version: Optional[Union[str, Literal["restricted access"]]] = Field(
         None,
-        alias="analysis version",
+        alias="Analysis Code Version",
         description="Version of the analysis code used in the analysis.",
         json_schema_extra={"recommended": True}
     )
@@ -100,18 +100,18 @@ class FAANGFAANGAnalysis(BaseModel):
         "restricted access"
     ]] = Field(
         None,
-        alias="reference genome",
+        alias="Reference Genome",
         description="The reference genome used in the analysis.",
         json_schema_extra={"recommended": True}
     )
     nextflow_config_url: Optional[HttpUrl] = Field(
         None,
-        alias="nextflow config url",
+        alias="Nextflow Config Url",
         description="Url of uploaded nextflow configuration file."
     )
     nextflow_spreadsheet_url: Optional[HttpUrl] = Field(
         None,
-        alias="nextflow spreadsheet url",
+        alias="Nextflow Spreadsheet Url",
         description="Url of uploaded nextflow spreadsheet file."
     )
 
@@ -120,6 +120,10 @@ class FAANGFAANGAnalysis(BaseModel):
         if isinstance(v, dict) and 'value' in v:
             return v['value']
         return v
+
+    @field_validator('analysis_protocol')
+    def validate_analysis_protocol_url(cls, v):
+        return validate_protocol_url(v, allow_restricted=True)
 
     @field_validator('alias', mode='before')
     def validate_alias_value(cls, v):
@@ -147,6 +151,14 @@ class FAANGFAANGAnalysis(BaseModel):
     def validate_reference_genome_value(cls, v):
         if isinstance(v, dict) and 'value' in v:
             return v['value']
+        if not v or v == "":
+            return None
+        return v
+
+    @field_validator('nextflow_config_url', 'nextflow_spreadsheet_url', mode='before')
+    def validate_nextflow_urls(cls, v):
+        if isinstance(v, dict) and 'value' in v:
+            v = v['value']
         if not v or v == "":
             return None
         return v

@@ -27,7 +27,7 @@ class ExperimentTarget(BaseModel):
         term = normalize_ontology_term(v)
         
         # Get ontology name from field or infer from term
-        ontology_name = info.data.get('ontology_name', 'EFO')
+        ontology_name = info.data.get('ontology_name', 'CHEBI')
         
         ov = get_ontology_validator()
         # Validate against CHEBI:33697 (RNA) or other allowed classes
@@ -188,19 +188,9 @@ class FAANGRNASeq(ExperimentCoreMetadata):
         json_schema_extra={"recommended": True}
     )
 
-    @field_validator('experiment_target', mode='before')
-    @classmethod
-    def validate_experiment_target_structure(cls, v):
-        if isinstance(v, dict):
-            # Handle case where experiment_target comes as a dict with nested structure
-            if 'text' in v and 'term' in v:
-                return v
-            # If it's a flat dict, try to extract values
-            return v
-        # If it's a string, convert to dict with text and empty term
-        if isinstance(v, str) and v:
-            return {"text": v, "term": ""}
-        return v
+
+
+
 
     @field_validator(
         'rna_preparation_3_adapter_ligation_protocol',

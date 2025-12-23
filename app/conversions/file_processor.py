@@ -39,11 +39,10 @@ def parse_contents(contents, filename):
 
             # Process headers using the same logic as in Google Sheet processor
             processed_headers = process_headers(headers)
-            # Build JSON data using the same logic as in Google Sheet processor
-            records = build_json_data(processed_headers, rows)
-
             # For CSV, we use a default sheet name
             sheet_name = "Sheet 1"
+            # Build JSON data using the same logic as in Google Sheet processor
+            records = build_json_data(processed_headers, rows, sheet_name)
             all_sheets_data = {sheet_name: records}
             sheet_names = [sheet_name]
 
@@ -70,7 +69,7 @@ def parse_contents(contents, filename):
                 # Process headers using the same logic as in Google Sheet processor
                 processed_headers = process_headers(headers)
                 # Build JSON data using the same logic as in Google Sheet processor
-                records = build_json_data(processed_headers, rows)
+                records = build_json_data(processed_headers, rows, sheet_name)
 
                 all_sheets_data[sheet_name] = records
 
@@ -120,11 +119,10 @@ def parse_contents_api(contents, filename):
 
             # Process headers using the same logic as in Google Sheet processor
             processed_headers = process_headers(headers)
-            # Build JSON data using the same logic as in Google Sheet processor
-            records = build_json_data(processed_headers, rows)
-
             # For CSV, we use a default sheet name
             sheet_name = "Sheet 1"
+            # Build JSON data using the same logic as in Google Sheet processor
+            records = build_json_data(processed_headers, rows, sheet_name)
             all_sheets_data = {sheet_name: records}
             sheet_names = [sheet_name]
 
@@ -151,7 +149,7 @@ def parse_contents_api(contents, filename):
                 # Process headers using the same logic as in Google Sheet processor
                 processed_headers = process_headers(headers)
                 # Build JSON data using the same logic as in Google Sheet processor
-                records = build_json_data(processed_headers, rows)
+                records = build_json_data(processed_headers, rows, sheet_name)
 
                 all_sheets_data[sheet_name] = records
                 # print(json.dumps(records, indent=2, default=str))
@@ -229,14 +227,19 @@ def process_headers(headers: List[str]) -> List[str]:
     return new_headers
 
 
-def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str, Any]]:
+def build_json_data(headers: List[str], rows: List[List[str]], sheet_name: str = "") -> List[Dict[str, Any]]:
     """
     Build JSON structure from processed headers and rows.
     Only include 'Health Status' if it exists in the headers.
-    Always treat 'Child Of', 'Specimen Picture URL', and 'Derived From' as lists.
+    Always treat 'Child Of', 'Specimen Picture URL', 'Derived From', 'Secondary Project' as lists.
+    'File Names', 'File Types', 'Checksum Methods', 'Checksums', 'Samples', 'Experiments', and 'Runs' 
+    are treated as lists only for analysis sheets (faang, ena, eva).
     Also handles experiment and analysis specific fields.
     """
     grouped_data = []
+    # Check if this is an analysis sheet
+    is_analysis_sheet = sheet_name.lower() in ['faang', 'ena', 'eva']
+    
     has_health_status = any(h.startswith("Health Status") for h in headers)
     has_cell_type = any(h.startswith("Cell Type") for h in headers)
     has_child_of = any(h == "Child Of" for h in headers)
@@ -248,6 +251,15 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
     # Analysis fields
     has_experiment_type = any(h.startswith("experiment type") for h in headers)
     has_platform = any(h.startswith("platform") for h in headers)
+    has_secondary_project = any(h.startswith("Secondary Project") for h in headers)
+    # List fields that should be arrays only for analysis sheets
+    has_file_names = is_analysis_sheet and any(h.startswith("File Names") for h in headers)
+    has_file_types = is_analysis_sheet and any(h.startswith("File Types") for h in headers)
+    has_checksum_methods = is_analysis_sheet and any(h.startswith("Checksum Methods") for h in headers)
+    has_checksums = is_analysis_sheet and any(h.startswith("Checksums") for h in headers)
+    has_samples = is_analysis_sheet and any(h.startswith("Samples") for h in headers)
+    has_experiments = is_analysis_sheet and any(h.startswith("Experiments") for h in headers)
+    has_runs = is_analysis_sheet and any(h.startswith("Runs") for h in headers)
 
     for row in rows:
         record: Dict[str, Any] = {}
@@ -269,6 +281,22 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             record["experiment type"] = []
         if has_platform:
             record["platform"] = []
+        if has_secondary_project:
+            record["Secondary Project"] = []
+        if has_file_names:
+            record["File Names"] = []
+        if has_file_types:
+            record["File Types"] = []
+        if has_checksum_methods:
+            record["Checksum Methods"] = []
+        if has_checksums:
+            record["Checksums"] = []
+        if has_samples:
+            record["Samples"] = []
+        if has_experiments:
+            record["Experiments"] = []
+        if has_runs:
+            record["Runs"] = []
 
         i = 0
         while i < len(headers):
@@ -390,6 +418,62 @@ def build_json_data(headers: List[str], rows: List[List[str]]) -> List[Dict[str,
             elif has_platform and col.startswith("platform"):
                 if val:  # Only append non-empty values
                     record["platform"].append({"value": val})
+                i += 1
+                continue
+
+            # Special handling for Secondary Project (analysis field - array of objects)
+            elif has_secondary_project and col.startswith("Secondary Project"):
+                if val:  # Only append non-empty values
+                    record["Secondary Project"].append({"value": val})
+                i += 1
+                continue
+
+            # Special handling for File Names (list field)
+            elif has_file_names and col.startswith("File Names"):
+                if val:  # Only append non-empty values
+                    record["File Names"].append(val)
+                i += 1
+                continue
+
+            # Special handling for File Types (list field)
+            elif has_file_types and col.startswith("File Types"):
+                if val:  # Only append non-empty values
+                    record["File Types"].append(val)
+                i += 1
+                continue
+
+            # Special handling for Checksum Methods (list field)
+            elif has_checksum_methods and col.startswith("Checksum Methods"):
+                if val:  # Only append non-empty values
+                    record["Checksum Methods"].append(val)
+                i += 1
+                continue
+
+            # Special handling for Checksums (list field)
+            elif has_checksums and col.startswith("Checksums"):
+                if val:  # Only append non-empty values
+                    record["Checksums"].append(val)
+                i += 1
+                continue
+
+            # Special handling for Samples (list field)
+            elif has_samples and col.startswith("Samples"):
+                if val:  # Only append non-empty values
+                    record["Samples"].append(val)
+                i += 1
+                continue
+
+            # Special handling for Experiments (list field)
+            elif has_experiments and col.startswith("Experiments"):
+                if val:  # Only append non-empty values
+                    record["Experiments"].append(val)
+                i += 1
+                continue
+
+            # Special handling for Runs (list field)
+            elif has_runs and col.startswith("Runs"):
+                if val:  # Only append non-empty values
+                    record["Runs"].append(val)
                 i += 1
                 continue
 
