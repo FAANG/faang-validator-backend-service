@@ -1,6 +1,6 @@
 # FAANG Validator Backend Service
 
-A FastAPI-based microservice for validating FAANG (Facebook, Amazon, Apple, Netflix, Google) data.
+A FastAPI-based microservice for validating FAANG data.
 
 ## Features
 
