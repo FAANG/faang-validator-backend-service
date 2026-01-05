@@ -231,7 +231,8 @@ def build_json_data(headers: List[str], rows: List[List[str]], sheet_name: str =
     """
     Build JSON structure from processed headers and rows.
     Only include 'Health Status' if it exists in the headers.
-    Always treat 'Child Of', 'Specimen Picture URL', 'Derived From', 'Secondary Project' as lists.
+    Always treat 'Child Of', 'Specimen Picture URL', 'Derived From' as lists.
+    'Secondary Project' is treated as a list only for analysis and experiment sheets.
     'File Names', 'File Types', 'Checksum Methods', 'Checksums', 'Samples', 'Experiments', and 'Runs' 
     are treated as lists only for analysis sheets (faang, ena, eva).
     Also handles experiment and analysis specific fields.
@@ -239,6 +240,11 @@ def build_json_data(headers: List[str], rows: List[List[str]], sheet_name: str =
     grouped_data = []
     # Check if this is an analysis sheet
     is_analysis_sheet = sheet_name.lower() in ['faang', 'ena', 'eva']
+    # Check if this is an experiment sheet (normalize sheet name like in unified_validator)
+    normalized_sheet_name = sheet_name.replace("_", " ").lower().strip()
+    is_experiment_sheet = normalized_sheet_name in ['chip-seq input dna', 'chip-seq dna-binding proteins', 'rna-seq']
+    # Secondary Project should be a list for analysis and experiment sheets only
+    is_analysis_or_experiment_sheet = is_analysis_sheet or is_experiment_sheet
     
     has_health_status = any(h.startswith("Health Status") for h in headers)
     has_cell_type = any(h.startswith("Cell Type") for h in headers)
@@ -252,6 +258,8 @@ def build_json_data(headers: List[str], rows: List[List[str]], sheet_name: str =
     has_experiment_type = any(h.startswith("experiment type") for h in headers)
     has_platform = any(h.startswith("platform") for h in headers)
     has_secondary_project = any(h.startswith("Secondary Project") for h in headers)
+    # Secondary Project should be a list only for analysis/experiment sheets
+    has_secondary_project_as_list = is_analysis_or_experiment_sheet and has_secondary_project
     # List fields that should be arrays only for analysis sheets
     has_file_names = is_analysis_sheet and any(h.startswith("File Names") for h in headers)
     has_file_types = is_analysis_sheet and any(h.startswith("File Types") for h in headers)
@@ -281,7 +289,7 @@ def build_json_data(headers: List[str], rows: List[List[str]], sheet_name: str =
             record["experiment type"] = []
         if has_platform:
             record["platform"] = []
-        if has_secondary_project:
+        if has_secondary_project_as_list:
             record["Secondary Project"] = []
         if has_file_names:
             record["File Names"] = []
@@ -421,10 +429,19 @@ def build_json_data(headers: List[str], rows: List[List[str]], sheet_name: str =
                 i += 1
                 continue
 
-            # Special handling for Secondary Project (analysis field - array of objects)
+            # Special handling for Secondary Project (list for analysis/experiment sheets, single value for sample sheets)
             elif has_secondary_project and col.startswith("Secondary Project"):
-                if val:  # Only append non-empty values
-                    record["Secondary Project"].append({"value": val})
+                if has_secondary_project_as_list:
+                    # For analysis/experiment sheets: treat as list
+                    if val:  # Only append non-empty values
+                        record["Secondary Project"].append(val)
+                else:
+                    # For sample sheets: treat as single value (use first non-empty value)
+                    if "Secondary Project" not in record:
+                        record["Secondary Project"] = val if val else None
+                    elif not record["Secondary Project"] and val:
+                        # Update if current value is empty/None and we have a non-empty value
+                        record["Secondary Project"] = val
                 i += 1
                 continue
 
