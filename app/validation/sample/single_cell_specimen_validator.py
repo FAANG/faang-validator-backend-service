@@ -1,8 +1,8 @@
 from typing import Dict, Any, Type
 from pydantic import BaseModel
-from app.validations.base_validator import BaseValidator
-from app.validations.generic_validator_classes import OntologyValidator, RelationshipValidator
-from app.rulesets_pydantics.single_cell_specimen_ruleset import FAANGSingleCellSpecimenSample
+from app.validation.sample.base_validator import BaseValidator
+from app.validation.sample.generic_validator_classes import OntologyValidator, RelationshipValidator
+from app.rulesets_pydantics.sample.single_cell_specimen_ruleset import FAANGSingleCellSpecimenSample
 
 
 class SingleCellSpecimenValidator(BaseValidator):

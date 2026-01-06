@@ -1,8 +1,8 @@
 from typing import List, Dict, Any, Type
 from pydantic import BaseModel
-from app.validations.base_validator import BaseValidator
-from app.validations.generic_validator_classes import OntologyValidator, BreedSpeciesValidator, RelationshipValidator
-from app.rulesets_pydantics.organism_ruleset import FAANGOrganismSample
+from app.validation.sample.base_validator import BaseValidator
+from app.validation.sample.generic_validator_classes import OntologyValidator, BreedSpeciesValidator, RelationshipValidator
+from app.rulesets_pydantics.sample.organism_ruleset import FAANGOrganismSample
 
 
 class OrganismValidator(BaseValidator):

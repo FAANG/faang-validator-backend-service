@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -6,7 +8,26 @@ class FAANGOrganization(BaseModel):
     organization_name: str = Field(..., alias="Organization Name")
     organization_address: str = Field(..., alias="Organization Address")
     organization_uri: str = Field(..., alias="Organization URI")
-    organization_role: str = Field(..., alias="Organization Role")
+
+    organization_role: Literal[
+        "array manufacturer",
+        "biomaterial provider",
+        "biosequence provider",
+        "consortium member",
+        "consultant",
+        "curator",
+        "data analyst",
+        "data coder",
+        "experiment performer",
+        "funder",
+        "hardware manufacturer",
+        "institution",
+        "investigator",
+        "material supplier role",
+        "peer review quality control role",
+        "software manufacturer",
+        "submitter"
+    ] = Field(..., alias="Organization Role")
 
     @field_validator('organization_name', 'organization_address', 'organization_uri', 'organization_role')
     def validate_not_empty(cls, v, info):

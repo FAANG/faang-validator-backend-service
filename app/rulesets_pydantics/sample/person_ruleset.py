@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
+from typing import Optional, Literal
 
 
 class FAANGPerson(BaseModel):
@@ -7,7 +7,25 @@ class FAANGPerson(BaseModel):
     person_last_name: str = Field(..., alias="Person Last Name")
     person_first_name: str = Field(..., alias="Person First Name")
     person_email: str = Field(..., alias="Person Email")
-    person_role: str = Field(..., alias="Person Role")
+    person_role: Literal[
+        "array manufacturer",
+        "biomaterial provider",
+        "biosequence provider",
+        "consortium member",
+        "consultant",
+        "curator",
+        "data analyst",
+        "data coder",
+        "experiment performer",
+        "funder",
+        "hardware manufacturer",
+        "institution",
+        "investigator",
+        "material supplier role",
+        "peer review quality control role",
+        "software manufacturer",
+        "submitter"
+    ] = Field(..., alias="Person Role")
 
     # optional field
     person_initials: Optional[str] = Field(None, alias="Person Initials")

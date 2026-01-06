@@ -1,8 +1,8 @@
 from typing import List, Dict, Any, Type
 from pydantic import ValidationError
-from app.rulesets_pydantics.submission_ruleset import FAANGSubmission
-from app.rulesets_pydantics.person_ruleset import FAANGPerson
-from app.rulesets_pydantics.organization_ruleset import FAANGOrganization
+from app.rulesets_pydantics.sample.submission_ruleset import FAANGSubmission
+from app.rulesets_pydantics.sample.person_ruleset import FAANGPerson
+from app.rulesets_pydantics.sample.organization_ruleset import FAANGOrganization
 
 
 class SubmissionValidator:

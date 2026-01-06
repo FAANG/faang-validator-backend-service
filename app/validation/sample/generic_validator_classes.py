@@ -5,9 +5,9 @@ import asyncio
 import aiohttp
 import re
 
-from app.validations.constants import SPECIES_BREED_LINKS, ALLOWED_RELATIONSHIPS, ELIXIR_VALIDATOR_URL
+from app.validation.constants import SPECIES_BREED_LINKS, ALLOWED_RELATIONSHIPS, ELIXIR_VALIDATOR_URL
 from contextvars import ContextVar
-from app.validations.base_validator import ontology_warnings_context
+from app.validation.sample.base_validator import ontology_warnings_context
 
 # Context variable to share OntologyValidator instance during Pydantic validation
 ontology_validator_context: ContextVar[Optional['OntologyValidator']] = ContextVar('ontology_validator', default=None)

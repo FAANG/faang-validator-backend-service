@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
-from app.validations.generic_validator_classes import get_ontology_validator
-from app.validations.validation_utils import (
+from app.validation.sample.generic_validator_classes import get_ontology_validator
+from app.validation.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
     validate_sample_name,
@@ -8,7 +8,7 @@ from app.validations.validation_utils import (
     validate_non_negative_numeric,
     strip_and_convert_empty_to_none
 )
-from typing import List, Optional, Union, Literal
+from typing import List, Union, Literal
 from .standard_ruleset import SampleCoreMetadata
 
 class CellType(BaseModel):
@@ -145,7 +145,7 @@ class FAANGCellCultureSample(SampleCoreMetadata):
 
     # convert empty strings to None for optional fields
     @field_validator(
-        'secondary_project', 'availability', 'same_as', mode='before'
+        'availability', 'same_as', mode='before'
     )
     def convert_empty_strings_to_none(cls, v):
         return strip_and_convert_empty_to_none(v)

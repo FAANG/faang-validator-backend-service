@@ -1,12 +1,12 @@
-from pydantic import BaseModel, Field, field_validator
-from app.validations.validation_utils import (
+from pydantic import Field, field_validator
+from app.validation.validation_utils import (
     validate_photoperiod,
     validate_non_negative_numeric,
     validate_percentage,
     strip_and_convert_empty_to_none
 )
 from typing import Optional, Union, Literal
-from app.rulesets_pydantics.specimen_ruleset import FAANGSpecimenFromOrganismSample
+from app.rulesets_pydantics.sample.specimen_ruleset import FAANGSpecimenFromOrganismSample
 
 
 class FAANGTeleosteiEmbryoSample(FAANGSpecimenFromOrganismSample):
