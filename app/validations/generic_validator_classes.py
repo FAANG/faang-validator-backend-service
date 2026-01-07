@@ -236,6 +236,47 @@ class OntologyValidator:
                 raise
 
 
+def collect_allowed_classes_terms() -> Set[str]:
+    """
+    Collect all allowed_classes terms used in validation rulesets.
+    These terms need to be pre-fetched because they're used during validation
+    to check if terms are valid subclasses.
+    """
+    allowed_classes = {
+        # From rna_seq_ruleset.py
+        "CHEBI:33697",  # RNA
+        # From chip_seq_dna_binding_proteins_ruleset.py
+        "CHEBI:15358",  # protein
+        # From organism_ruleset.py
+        "PATO:0000461",  # health status
+        "EFO:0000408",  # health status
+        "NCBITaxon",  # organism
+        "PATO:0000047",  # sex
+        "LBO",  # breed
+        # From specimen_ruleset.py
+        "EFO:0000399",  # material
+        "UBERON:0000105",  # organism part
+        "UBERON:0001062",  # organ model
+        "BTO:0000042",  # organ part model
+        # From single_cell_specimen_ruleset.py
+        "CL:0000000",  # cell type
+        # From organoid_ruleset.py
+        # (uses same as specimen: UBERON:0001062, BTO:0000042)
+        # From cell_specimen_ruleset.py
+        # (uses CL:0000000)
+        # From cell_line_ruleset.py
+        "BTO:0000000",  # cell line
+        "NCBITaxon:1",  # organism
+        "LBO:0000000",  # breed
+        # From cell_culture_ruleset.py
+        "BTO:0000214",  # cell culture
+        # From teleostei_post_hatching_ruleset.py
+        "PATO:0001501",  # developmental stage
+        "PATO:0001701",  # developmental stage
+    }
+    return allowed_classes
+
+
 def collect_ontology_terms_from_data(data: Dict[str, List[Dict]]) -> Set[str]:
     term_ids = set()
 
@@ -290,6 +331,38 @@ def collect_ontology_terms_from_data(data: Dict[str, List[Dict]]) -> Set[str]:
                                 if '_' in term_value and ':' not in term_value:
                                     term_value = term_value.replace('_', ':', 1)
                                 term_ids.add(term_value)
+
+            # check experiment target (nested structure for experiments)
+            if 'experiment target' in sample and sample['experiment target']:
+                exp_target = sample['experiment target']
+                if isinstance(exp_target, dict) and 'term' in exp_target:
+                    term_value = exp_target['term']
+                    if term_value not in ["restricted access", "not applicable", "not collected",
+                                          "not provided", ""]:
+                        if '_' in term_value and ':' not in term_value:
+                            term_value = term_value.replace('_', ':', 1)
+                        term_ids.add(term_value)
+            # Also check for "Experiment Target" (capitalized)
+            if 'Experiment Target' in sample and sample['Experiment Target']:
+                exp_target = sample['Experiment Target']
+                if isinstance(exp_target, dict) and 'term' in exp_target:
+                    term_value = exp_target['term']
+                    if term_value not in ["restricted access", "not applicable", "not collected",
+                                          "not provided", ""]:
+                        if '_' in term_value and ':' not in term_value:
+                            term_value = term_value.replace('_', ':', 1)
+                        term_ids.add(term_value)
+
+            # check chip target (nested structure for experiments)
+            if 'chip target' in sample and sample['chip target']:
+                chip_target = sample['chip target']
+                if isinstance(chip_target, dict) and 'term' in chip_target:
+                    term_value = chip_target['term']
+                    if term_value not in ["restricted access", "not applicable", "not collected",
+                                          "not provided", ""]:
+                        if '_' in term_value and ':' not in term_value:
+                            term_value = term_value.replace('_', ':', 1)
+                        term_ids.add(term_value)
 
     return term_ids
 

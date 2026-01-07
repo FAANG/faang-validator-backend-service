@@ -19,6 +19,7 @@ from app.validations.experiment_validator import ChipSeqInputDNAValidator, ChipS
 from app.validations.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, ENAAnalysisValidator
 from app.validations.generic_validator_classes import (
     collect_ontology_terms_from_data,
+    collect_allowed_classes_terms,
     OntologyValidator,
     RelationshipValidator
 )
@@ -302,8 +303,12 @@ class UnifiedFAANGValidator:
         self.supported_analysis_types = set(self.analysis_validators.keys())
 
     def prefetch_all_ontology_terms(self, data: Dict[str, List[Dict[str, Any]]]):
-        # collect unique term IDs
+        # collect unique term IDs from data
         term_ids = collect_ontology_terms_from_data(data)
+        
+        # also collect allowed_classes terms used in validation rules
+        allowed_classes_terms = collect_allowed_classes_terms()
+        term_ids.update(allowed_classes_terms)
 
         if not term_ids:
             print("No ontology terms to pre-fetch")
@@ -316,8 +321,12 @@ class UnifiedFAANGValidator:
     @cprofiled()
     # async version for use in FastAPI endpoints
     async def prefetch_all_ontology_terms_async(self, data: Dict[str, List[Dict[str, Any]]]):
-        # collect unique term IDs
+        # collect unique term IDs from data
         term_ids = collect_ontology_terms_from_data(data)
+        
+        # also collect allowed_classes terms used in validation rules
+        allowed_classes_terms = collect_allowed_classes_terms()
+        term_ids.update(allowed_classes_terms)
 
         if not term_ids:
             print("No ontology terms to pre-fetch")

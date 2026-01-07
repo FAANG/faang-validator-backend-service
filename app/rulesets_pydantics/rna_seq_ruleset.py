@@ -9,26 +9,24 @@ from app.rulesets_pydantics.experiment_core_ruleset import ExperimentCoreMetadat
 
 
 class ExperimentTarget(BaseModel):
-    """Model for experiment target with text and term."""
-    text: Union[str, Literal["restricted access"]] = Field(..., alias="text")
-    term: Union[str, Literal["restricted access"]] = Field(..., alias="term")
-    ontology_name: Optional[Literal["EFO"]] = Field(None, alias="ontology_name")
+    """Model for experiment target with teUnionxt and term."""
+    text: str
+    term: Union[str, Literal["restricted access"]]
+    # ontology_name: Optional[Literal["EFO"]] = Field(None, alias="ontology_name")
     
     class Config:
         populate_by_name = True
 
     @field_validator('term')
-    @classmethod
     def validate_experiment_target_term(cls, v, info):
         if v == "restricted access":
             return v
         
         # Normalize the term (convert underscore to colon)
         term = normalize_ontology_term(v)
-        
-        # Get ontology name from field or infer from term
-        ontology_name = info.data.get('ontology_name', 'CHEBI')
-        
+        if term.startswith("CHEBI:"):
+            ontology_name = "CHEBI"
+
         ov = get_ontology_validator()
         # Validate against CHEBI:33697 (RNA) or other allowed classes
         res = ov.validate_ontology_term(
