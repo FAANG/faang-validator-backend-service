@@ -34,11 +34,12 @@ class OrganismValidator(BaseValidator):
         }
 
     def export_to_biosample_format(self, model: FAANGOrganismSample) -> Dict[str, Any]:
+
         def convert_term_to_url(term_id: str) -> str:
             if not term_id or term_id in ["restricted access", ""]:
                 return ""
-            if "_" in term_id and ":" not in term_id:
-                term_colon = term_id.replace("_", ":", 1)
+            if '_' in term_id and ':' not in term_id:
+                term_colon = term_id.replace('_', ':', 1)
             else:
                 term_colon = term_id
             return f"http://purl.obolibrary.org/obo/{term_colon.replace(':', '_')}"

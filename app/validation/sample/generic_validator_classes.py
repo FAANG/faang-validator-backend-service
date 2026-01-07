@@ -164,7 +164,6 @@ class OntologyValidator:
             return term_id, self._cache[term_id]
 
         try:
-            print(term_id)
             url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                 response.raise_for_status()
