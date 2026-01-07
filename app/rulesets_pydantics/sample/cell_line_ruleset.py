@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from app.validations.generic_validator_classes import get_ontology_validator
-from app.validations.validation_utils import (
+from app.validation.sample.generic_validator_classes import get_ontology_validator
+from app.validation.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
     validate_sample_name,
@@ -294,7 +294,7 @@ class FAANGCellLineSample(SampleCoreMetadata):
         'catalogue_number', 'number_of_passages', 'date_established', 'date_established_unit',
         'publication', 'breed', 'breed_term_source_id', 'cell_type',
         'culture_conditions', 'culture_protocol', 'disease', 'disease_term_source_id',
-        'karyotype', 'secondary_project', 'availability', 'same_as', mode='before'
+        'karyotype', 'availability', 'same_as', mode='before'
     )
     def convert_empty_strings_to_none(cls, v):
         return strip_and_convert_empty_to_none(v)

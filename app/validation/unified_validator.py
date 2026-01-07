@@ -4,25 +4,25 @@ from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from app.profiler import cprofiled
-from app.validations.teleostei_embryo_validator import TeleosteiEmbryoValidator
-from app.validations.organism_validator import OrganismValidator
-from app.validations.organoid_validator import OrganoidValidator
-from app.validations.specimen_validator import SpecimenValidator
-from app.validations.teleostei_post_hatching_validator import TeleosteiPostHatchingValidator
-from app.validations.single_cell_specimen_validator import SingleCellSpecimenValidator
-from app.validations.pool_of_specimens_validator import PoolOfSpecimensValidator
-from app.validations.cell_specimen_validator import CellSpecimenValidator
-from app.validations.cell_culture_validator import CellCultureValidator
-from app.validations.cell_line_validator import CellLineValidator
-from app.validations.metadata_validator import SubmissionValidator, PersonValidator, OrganizationValidator
-from app.validations.experiment_validator import ChipSeqInputDNAValidator, ChipSeqDNABindingProteinsValidator, RNASeqValidator, RNASeqValidator
-from app.validations.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, ENAAnalysisValidator
-from app.validations.generic_validator_classes import (
+from app.validation.sample.teleostei_embryo_validator import TeleosteiEmbryoValidator
+from app.validation.sample.organism_validator import OrganismValidator
+from app.validation.sample.organoid_validator import OrganoidValidator
+from app.validation.sample.specimen_validator import SpecimenValidator
+from app.validation.sample.teleostei_post_hatching_validator import TeleosteiPostHatchingValidator
+from app.validation.sample.single_cell_specimen_validator import SingleCellSpecimenValidator
+from app.validation.sample.pool_of_specimens_validator import PoolOfSpecimensValidator
+from app.validation.sample.cell_specimen_validator import CellSpecimenValidator
+from app.validation.sample.cell_culture_validator import CellCultureValidator
+from app.validation.sample.cell_line_validator import CellLineValidator
+from app.validation.sample.metadata_validator import SubmissionValidator, PersonValidator, OrganizationValidator
+from app.validation.experiment_validator import ChipSeqInputDNAValidator, ChipSeqDNABindingProteinsValidator, RNASeqValidator, RNASeqValidator
+from app.validation.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, ENAAnalysisValidator
+from app.validation.sample.generic_validator_classes import (
     collect_ontology_terms_from_data,
     OntologyValidator,
     RelationshipValidator
 )
-from app.validations.webin_submission import WebinBioSamplesSubmission
+from app.validation.webin_submission import WebinBioSamplesSubmission
 
 
 def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> BaseModel:
@@ -717,7 +717,7 @@ class UnifiedFAANGValidator:
                                             parent_model = organism_samples[parent_name]
                                             if hasattr(parent_model, 'organism') and hasattr(parent_model,
                                                                                              'organism_term_source_id'):
-                                                from app.validations.organism_validator import OrganismValidator
+                                                from app.validation.sample.organism_validator import OrganismValidator
                                                 org_validator = OrganismValidator()
                                                 parent_biosample_data = org_validator.export_to_biosample_format(
                                                     parent_model)
@@ -773,7 +773,7 @@ class UnifiedFAANGValidator:
                                                         parent_model = organism_samples[spec_parent_name]
                                                         if hasattr(parent_model, 'organism') and hasattr(parent_model,
                                                                                                          'organism_term_source_id'):
-                                                            from app.validations.organism_validator import \
+                                                            from app.validation.sample.organism_validator import \
                                                                 OrganismValidator
                                                             org_validator = OrganismValidator()
                                                             parent_biosample_data = org_validator.export_to_biosample_format(

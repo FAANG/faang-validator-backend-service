@@ -1,8 +1,8 @@
 from typing import List, Dict, Any, Type
 from pydantic import BaseModel
-from app.validations.base_validator import BaseValidator
-from app.validations.generic_validator_classes import OntologyValidator, BreedSpeciesValidator, RelationshipValidator
-from app.rulesets_pydantics.organism_ruleset import FAANGOrganismSample
+from app.validation.sample.base_validator import BaseValidator
+from app.validation.sample.generic_validator_classes import OntologyValidator, BreedSpeciesValidator, RelationshipValidator
+from app.rulesets_pydantics.sample.organism_ruleset import FAANGOrganismSample
 
 
 class OrganismValidator(BaseValidator):
@@ -34,11 +34,12 @@ class OrganismValidator(BaseValidator):
         }
 
     def export_to_biosample_format(self, model: FAANGOrganismSample) -> Dict[str, Any]:
+
         def convert_term_to_url(term_id: str) -> str:
             if not term_id or term_id in ["restricted access", ""]:
                 return ""
-            if "_" in term_id and ":" not in term_id:
-                term_colon = term_id.replace("_", ":", 1)
+            if '_' in term_id and ':' not in term_id:
+                term_colon = term_id.replace('_', ':', 1)
             else:
                 term_colon = term_id
             return f"http://purl.obolibrary.org/obo/{term_colon.replace(':', '_')}"

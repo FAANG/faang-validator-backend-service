@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator, HttpUrl
 from typing import List, Union, Literal, Optional
-from app.validations.validation_utils import strip_and_convert_empty_to_none, validate_protocol_url
+from app.validation.validation_utils import strip_and_convert_empty_to_none, validate_protocol_url
 
 
 class SecondaryProjectItem(BaseModel):

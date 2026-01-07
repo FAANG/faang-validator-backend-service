@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
-from app.validations.generic_validator_classes import BreedSpeciesValidator, get_ontology_validator
-from app.validations.validation_utils import (
+from app.validation.sample.generic_validator_classes import BreedSpeciesValidator, get_ontology_validator
+from app.validation.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
     validate_sample_name,
@@ -226,8 +226,7 @@ class FAANGOrganismSample(SampleCoreMetadata):
         breed_term = values.get('Breed Term Source ID') or values.get('breed_term_source_id')
 
         # check if breed is provided without breed_term_source_id
-        # Also check if breed_term is empty string (not just None)
-        if v and v.strip() and (not breed_term or (isinstance(breed_term, str) and not breed_term.strip())):
+        if v and v.strip() and not breed_term:
             raise ValueError(f"Breed '{v}' is provided but Breed Term Source ID is missing")
 
         # check if breed_term_source_id is provided without breed text

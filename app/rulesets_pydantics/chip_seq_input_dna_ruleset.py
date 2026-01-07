@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Union, Literal
-from app.validations.validation_utils import strip_and_convert_empty_to_none
+from app.validation.validation_utils import strip_and_convert_empty_to_none
 
 
 class FAANGChipSeqInputDNA(BaseModel):

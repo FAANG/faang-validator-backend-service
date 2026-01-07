@@ -31,7 +31,7 @@ class SampleCoreMetadata(BaseModel):
     project: Literal["FAANG"] = Field(..., alias="Project")
 
     # optional fields
-    secondary_project: Optional[Literal[
+    secondary_project: Optional[List[Literal[
         "AQUA-FAANG",
         "BovReg",
         "GENE-SWitCH",
@@ -42,7 +42,8 @@ class SampleCoreMetadata(BaseModel):
         "Equine-FAANG",
         "Holoruminant",
         "USPIGFAANG"
-    ]] = Field(None, alias="Secondary Project")
+    ]]] = Field(None, alias="Secondary Project")
+
     availability: Optional[str] = Field(None, alias="Availability")
     same_as: Optional[str] = Field(None, alias="Same as")
 
@@ -78,11 +79,20 @@ class SampleCoreMetadata(BaseModel):
             raise ValueError("Availability must be a web URL or email address with 'mailto:' prefix")
         return v
 
-
     @field_validator('secondary_project', mode='before')
     def validate_secondary_project(cls, v):
-        if not v or v.strip() == "":
+        if not v:
             return None
+
+        if isinstance(v, str):
+            if v.strip() == "":
+                return None
+            v = [v]
+
+        if isinstance(v, list):
+            filtered = [item for item in v if item and isinstance(item, str) and item.strip()]
+            return filtered if filtered else None
+
         return v
 
     class Config:

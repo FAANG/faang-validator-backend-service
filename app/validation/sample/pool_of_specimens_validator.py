@@ -1,8 +1,8 @@
 from typing import Dict, Any, Type
 from pydantic import BaseModel
-from app.validations.base_validator import BaseValidator
-from app.validations.generic_validator_classes import OntologyValidator, RelationshipValidator
-from app.rulesets_pydantics.pool_of_specimens_ruleset import FAANGPoolOfSpecimensSample
+from app.validation.sample.base_validator import BaseValidator
+from app.validation.sample.generic_validator_classes import OntologyValidator, RelationshipValidator
+from app.rulesets_pydantics.sample.pool_of_specimens_ruleset import FAANGPoolOfSpecimensSample
 
 
 class PoolOfSpecimensValidator(BaseValidator):

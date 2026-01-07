@@ -4,7 +4,7 @@ from typing import Dict, List, Any, Optional
 import requests
 import json
 
-from app.validations.constants import (
+from app.validation.constants import (
     WEBIN_TEST_SERVER,
     WEBIN_PROD_SERVER,
     SUBMISSION_TEST_SERVER,
