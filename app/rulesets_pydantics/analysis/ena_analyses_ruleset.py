@@ -1,25 +1,46 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Union, Literal, Optional
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import List, Literal, Optional
 from app.validation.validation_utils import (
-    validate_date_format
-
+    validate_date_format,
+    strip_and_convert_empty_to_none
 )
 
 
-class StringValueItem(BaseModel):
-    """Model for array items with string value."""
-    value: str = Field(..., alias="value")
+class FAANGENAAnalysis(BaseModel):
 
-    @field_validator('value', mode='before')
-    def validate_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        return v
+    # required fields
+    alias: str = Field(..., alias="Alias")
 
+    analysis_type: Literal[
+        "REFERENCE_ALIGNMENT",
+        "SEQUENCE_VARIATION",
+        "PATHOGEN_ANALYSIS",
+        "TRANSCRIPTOME_ASSEMBLY",
+        "TAXONOMIC_REFERENCE_SET",
+        "SEQUENCE_ASSEMBLY",
+        "SEQUENCE_FLATFILE",
+        "SEQUENCE_ANNOTATION",
+        "REFERENCE_SEQUENCE",
+        "SAMPLE_PHENOTYPE",
+        "PROCESSED_READS",
+        "GENOME_MAP",
+        "AMR_ANTIBIOGRAM",
+        "restricted access"
+    ] = Field(
+        ...,
+        alias="Analysis Type")
 
-class FileTypeItem(BaseModel):
-    """Model for file type item in array."""
-    value: Literal[
+    study: str = Field(
+        ...,
+        alias="Study"
+    )
+
+    file_names: List[str] = Field(
+        ...,
+        alias="File Names"
+    )
+
+    file_types: List[Literal[
         "tab",
         "bam",
         "bed",
@@ -47,166 +68,136 @@ class FileTypeItem(BaseModel):
         "tabix",
         "wig",
         "restricted access"
-    ] = Field(..., alias="value")
+    ]] = Field(
+        ...,
+        alias="File Types")
 
-    @field_validator('value', mode='before')
-    def validate_file_type_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        return v
+    checksum_methods: List[str] = Field(
+        ...,
+        alias="Checksum Methods")
 
-class FAANGENAAnalysis(BaseModel):
-    """
-    Pydantic model for ENA (European Nucleotide Archive) analysis metadata.
-    Based on faang_analyses_ena.metadata_rules.json
-    """
-    # required fields
-    alias: str = Field(
+    checksums: List[str] = Field(
         ...,
-        alias="Alias",
-        description="The alias of the analysis."
-    )
-    analysis_type: Literal[
-        "REFERENCE_ALIGNMENT",
-        "SEQUENCE_VARIATION",
-        "PATHOGEN_ANALYSIS",
-        "TRANSCRIPTOME_ASSEMBLY",
-        "TAXONOMIC_REFERENCE_SET",
-        "SEQUENCE_ASSEMBLY",
-        "SEQUENCE_FLATFILE",
-        "SEQUENCE_ANNOTATION",
-        "REFERENCE_SEQUENCE",
-        "SAMPLE_PHENOTYPE",
-        "PROCESSED_READS",
-        "GENOME_MAP",
-        "AMR_ANTIBIOGRAM",
-        "restricted access"
-    ] = Field(
-        ...,
-        alias="Analysis Type",
-        description="The type of analysis performed."
-    )
-    study: str = Field(
-        ...,
-        alias="Study",
-        description="Identifies the parent study."
-    )
-    file_names: List[StringValueItem] = Field(
-        ...,
-        alias="File Names",
-        description="The names of the files associated with this analysis."
-    )
-    file_types: List[FileTypeItem] = Field(
-        ...,
-        alias="File Types",
-        description="The types of the files associated with this analysis."
-    )
-    checksum_methods: List[StringValueItem] = Field(
-        ...,
-        alias="Checksum Methods",
-        description="The checksum methods used on the files."
-    )
-    checksums: List[StringValueItem] = Field(
-        ...,
-        alias="Checksums",
-        description="The checksum values of the files."
-    )
+        alias="Checksums")
 
     # recommended fields
     title: Optional[str] = Field(
         None,
         alias="Title",
-        description="The title of the analysis.",
         json_schema_extra={"recommended": True}
     )
+
     description: Optional[str] = Field(
         None,
         alias="Description",
-        description="Describes the analysis in detail.",
         json_schema_extra={"recommended": True}
     )
-    samples: Optional[List[StringValueItem]] = Field(
+
+    samples: Optional[List[str]] = Field(
         None,
         alias="Samples",
-        description="One or more samples associated with the analysis."
+        json_schema_extra={"recommended": True}
     )
-    experiments: Optional[List[StringValueItem]] = Field(
+
+    experiments: Optional[List[str]] = Field(
         None,
         alias="Experiments",
-        description="One or more experiments associated with the analysis."
+        json_schema_extra={"recommended": True}
     )
-    runs: Optional[List[StringValueItem]] = Field(
+
+    runs: Optional[List[str]] = Field(
         None,
         alias="Runs",
-        description="One or more runs associated with the analysis."
+        json_schema_extra={"recommended": True}
     )
-    related_analyses: Optional[List[StringValueItem]] = Field(
+
+    # optional fields
+    related_analyses: Optional[List[str]] = Field(
         None,
-        alias="Related Analyses",
-        description="One or more analyses associated with the analysis."
-    )
+        alias="Related Analyses")
+
     analysis_center: Optional[str] = Field(
         None,
-        alias="Analysis Center",
-        description="The center name of the institution responsible for this analysis."
-    )
+        alias="Analysis Center")
 
-    analysis_date: Optional[str] = Field(None, alias="Analysis Date", json_schema_extra={"recommended": True})
-    unit: Optional[Literal[
+    analysis_date: Optional[str] = Field(
+        None,
+        alias="Analysis Date")
+
+    analysis_date_unit: Optional[Literal[
         "YYYY-MM-DD",
         "YYYY-MM",
-        "YYYY",
-        "not applicable",
-        "not collected",
-        "not provided",
-        "restricted access",
-        ""
-    ]] = Field(None, alias="Unit", json_schema_extra={"recommended": True})
+        "YYYY"
+    ]] = Field(
+        None,
+        alias="Unit")
 
+    # validators
+    @field_validator('alias', 'study')
+    def validate_required_string_not_empty(cls, v, info):
+        if not v or (isinstance(v, str) and v.strip() == ""):
+            field_name = info.field_name
+            raise ValueError(f"{field_name} is required and cannot be empty")
+        return v.strip() if isinstance(v, str) else v
 
-    @field_validator('alias', 'analysis_type', 'study', mode='before')
-    def validate_object_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        return v
-
-    @field_validator('title', 'description', 'analysis_center', mode='before')
-    def validate_optional_object_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        if not v or v == "":
-            return None
-        return v
-
-    @field_validator('file_names', 'file_types', 'checksum_methods', 'checksums', mode='before')
-    def validate_array_items(cls, v):
-        if isinstance(v, list):
-            return [item if isinstance(item, dict) else {'value': item} for item in v]
+    @field_validator('file_names', 'file_types', 'checksum_methods', 'checksums')
+    def validate_required_arrays_not_empty(cls, v, info):
+        field_name = info.field_name
+        if not v or len(v) == 0:
+            raise ValueError(f"{field_name} is required and cannot be empty")
         return v
 
     @field_validator('samples', 'experiments', 'runs', 'related_analyses', mode='before')
-    def validate_optional_array_items(cls, v):
-        if isinstance(v, list):
-            return [item if isinstance(item, dict) else {'value': item} for item in v]
+    def validate_optional_arrays(cls, v):
         if not v:
             return None
-        return v
 
-    @field_validator('analysis_date', mode='before')
-    def validate_analysis_date(cls, v):
-        if isinstance(v, dict):
-            if 'value' in v and 'units' in v:
-                return v
-            # If it's a flat dict, try to extract
-            return v
+        if isinstance(v, list):
+            result = [item.strip() for item in v if item and str(item).strip()]
+            return result if result else None
+
+        if isinstance(v, str) and v.strip():
+            return [v.strip()]
+
+        return None
+
+    @field_validator('analysis_date')
+    def validate_analysis_date_format(cls, v, info):
         if not v:
             return None
-        return v
+
+        values = info.data
+        unit = values.get('Unit') or values.get('analysis_date_unit')
+        return validate_date_format(v, unit, "Analysis date")
+
+    @field_validator(
+        'title', 'description', 'analysis_center', 'analysis_date_unit',
+        mode='before'
+    )
+    def convert_empty_strings_to_none(cls, v):
+        return strip_and_convert_empty_to_none(v)
+
+    @model_validator(mode='after')
+    def validate_file_arrays_same_length(self):
+        arrays = {
+            'file_names': len(self.file_names) if self.file_names else 0,
+            'file_types': len(self.file_types) if self.file_types else 0,
+            'checksum_methods': len(self.checksum_methods) if self.checksum_methods else 0,
+            'checksums': len(self.checksums) if self.checksums else 0
+        }
+
+        lengths = set(arrays.values())
+        if len(lengths) > 1:
+            raise ValueError(
+                f"File Names, File Types, Checksum Methods, and Checksums must all have the same length. "
+                f"Got: File Names={arrays['file_names']}, File Types={arrays['file_types']}, "
+                f"Checksum Methods={arrays['checksum_methods']}, Checksums={arrays['checksums']}"
+            )
+
+        return self
 
     class Config:
         populate_by_name = True
         validate_default = True
         validate_assignment = True
         extra = "forbid"
-
-
