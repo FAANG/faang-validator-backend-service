@@ -7,7 +7,7 @@ import traceback
 
 from app.conversions.file_processor import parse_contents_api
 from app.profiler import cprofiled
-from app.validation.sample.unified_validator import UnifiedFAANGValidator
+from app.validation.unified_validator import UnifiedFAANGValidator
 
 app = FastAPI(
     title="FAANG Validation API",
