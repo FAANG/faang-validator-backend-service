@@ -1,8 +1,8 @@
 from typing import List, Dict, Any
 from pydantic import ValidationError
-from app.rulesets_pydantics.eva_analyses_ruleset import FAANGEVAAnalysis
-from app.rulesets_pydantics.faang_analyses_ruleset import FAANGFAANGAnalysis
-from app.rulesets_pydantics.ena_analyses_ruleset import FAANGENAAnalysis
+from app.rulesets_pydantics.analysis.eva_analyses_ruleset import FAANGEVAAnalysis
+from app.rulesets_pydantics.analysis.faang_analyses_ruleset import FAANGFAANGAnalysis
+from app.rulesets_pydantics.analysis.ena_analyses_ruleset import FAANGENAAnalysis
 
 
 class EVAAnalysisValidator:
