@@ -6,8 +6,7 @@ from app.validation.validation_utils import (
 )
 
 
-class FAANGENAAnalysis(BaseModel):
-
+class ENAAnalysis(BaseModel):
     # required fields
     alias: str = Field(..., alias="Alias")
 

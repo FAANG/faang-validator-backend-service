@@ -3,7 +3,7 @@ from typing import List, Union, Literal, Optional
 from app.validation.validation_utils import strip_and_convert_empty_to_none, validate_protocol_url
 
 
-class FAANGFAANGAnalysis(BaseModel):
+class FAANGAnalysis(BaseModel):
     # required fields
     project: Literal["FAANG", "restricted access"] = Field(..., alias="Project")
 

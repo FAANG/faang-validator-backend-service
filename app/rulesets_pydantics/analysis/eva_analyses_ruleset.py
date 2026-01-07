@@ -1,11 +1,12 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Union, Literal, Optional
+from pydantic import Field, field_validator
+from typing import List, Literal, Optional
+from app.validation.validation_utils import strip_and_convert_empty_to_none
+from app.rulesets_pydantics.analysis.ena_analyses_ruleset import ENAAnalysis
 
 
-
-class ExperimentTypeItem(BaseModel):
-    """Model for experiment type item in array."""
-    value: Literal[
+class EVAAnalysis(ENAAnalysis):
+    # required fields
+    experiment_type: List[Literal[
         "Whole Genome Sequencing",
         "Whole Transcriptome Sequencing",
         "Exome Sequencing",
@@ -15,18 +16,17 @@ class ExperimentTypeItem(BaseModel):
         "Genotyping By Sequencing",
         "Target Sequencing",
         "restricted access"
-    ] = Field(..., alias="value")
+    ]] = Field(
+        ...,
+        alias="Experiment Type")
 
-    @field_validator('value', mode='before')
-    def validate_experiment_type_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        return v
+    program: Optional[str] = Field(
+        None,
+        alias="Program",
+        json_schema_extra={"recommended": True}
+    )
 
-
-class PlatformItem(BaseModel):
-    """Model for platform item in array."""
-    value: Literal[
+    platform: Optional[List[Literal[
         "Nimblegen 4.2M Probe Custom DNA Microarray",
         "Illumina NovaSeq 6000",
         "Illumina Genome Analyzer",
@@ -77,75 +77,47 @@ class PlatformItem(BaseModel):
         "not collected",
         "not provided",
         "restricted access"
-    ] = Field(..., alias="value")
-
-    @field_validator('value', mode='before')
-    def validate_platform_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        return v
-
-
-class FAANGEVAAnalysis(BaseModel):
-    """
-    Pydantic model for EVA (European Variation Archive) analysis metadata.
-    Based on faang_analyses_eva.metadata_rules.json
-    """
-    # required fields
-    experiment_type: List[ExperimentTypeItem] = Field(
-        ...,
-        alias="Experiment Type",
-        description="The type of experiment."
-    )
-    program: str = Field(
-        ...,
-        alias="Program",
-        description="The programs/tools used in the analysis separated by commas.",
+    ]]] = Field(
+        None,
+        alias="Platform",
         json_schema_extra={"recommended": True}
     )
-    platform: List[PlatformItem] = Field(
-        ...,
-        alias="Platform",
-        description="The platform(s) used to do the sequencing separated by commas."
-    )
-    special_analysis_type: Optional[Literal["imputation analysis", "phasing analysis"]] = Field(
-        None,
-        alias="Special Analysis Type",
-        description="Indicates the special type of analysis, e.g. imputation analysis, phasing analysis."
-    )
 
-    @field_validator('experiment_type', mode='before')
-    def validate_experiment_type_array(cls, v):
-        if isinstance(v, list):
-            # Handle list of dicts with 'value' key
-            return [item if isinstance(item, dict) else {'value': item} for item in v]
+    # optional
+    special_analysis_type: Optional[Literal[
+        "imputation analysis",
+        "phasing analysis"
+    ]] = Field(
+        None,
+        alias="Special Analysis Type")
+
+    # validators
+    @field_validator('experiment_type')
+    def validate_experiment_type_not_empty(cls, v):
+        if not v or len(v) == 0:
+            raise ValueError("Experiment Type is required and cannot be empty")
         return v
 
     @field_validator('platform', mode='before')
     def validate_platform_array(cls, v):
-        if isinstance(v, list):
-            # Handle list of dicts with 'value' key
-            return [item if isinstance(item, dict) else {'value': item} for item in v]
-        return v
-
-    @field_validator('program', mode='before')
-    def validate_program_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        return v
-
-    @field_validator('special_analysis_type', mode='before')
-    def validate_special_analysis_type_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        if not v or v == "":
+        if not v:
             return None
-        return v
+
+        if isinstance(v, list):
+            result = [item.strip() for item in v if item and str(item).strip()]
+            return result if result else None
+
+        if isinstance(v, str) and v.strip():
+            return [v.strip()]
+
+        return None
+
+    @field_validator('program', 'special_analysis_type', mode='before')
+    def convert_empty_strings_to_none_eva(cls, v):
+        return strip_and_convert_empty_to_none(v)
 
     class Config:
         populate_by_name = True
         validate_default = True
         validate_assignment = True
         extra = "forbid"
-
-

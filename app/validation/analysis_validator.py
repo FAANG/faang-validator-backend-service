@@ -1,8 +1,8 @@
 from typing import List, Dict, Any
 from pydantic import ValidationError
-from app.rulesets_pydantics.analysis.eva_analyses_ruleset import FAANGEVAAnalysis
-from app.rulesets_pydantics.analysis.faang_analyses_ruleset import FAANGFAANGAnalysis
-from app.rulesets_pydantics.analysis.ena_analyses_ruleset import FAANGENAAnalysis
+from app.rulesets_pydantics.analysis.eva_analyses_ruleset import EVAAnalysis
+from app.rulesets_pydantics.analysis.faang_analyses_ruleset import FAANGAnalysis
+from app.rulesets_pydantics.analysis.ena_analyses_ruleset import ENAAnalysis
 
 
 class EVAAnalysisValidator:
@@ -34,7 +34,7 @@ class EVAAnalysisValidator:
         for i, record in enumerate(records):
             sample_name = record.get('Analysis Alias') or record.get('analysis_alias') or record.get('Sample Name') or f'eva_{i}'
             try:
-                model = FAANGEVAAnalysis(**record)
+                model = EVAAnalysis(**record)
                 results['valid_evas'].append({
                     'index': i,
                     'sample_name': sample_name,
@@ -110,7 +110,7 @@ class FAANGAnalysisValidator:
         for i, record in enumerate(records):
             sample_name = record.get('Analysis Alias') or record.get('analysis_alias') or record.get('Sample Name') or f'faang_{i}'
             try:
-                model = FAANGFAANGAnalysis(**record)
+                model = FAANGAnalysis(**record)
                 results['valid_faangs'].append({
                     'index': i,
                     'sample_name': sample_name,
@@ -186,7 +186,7 @@ class ENAAnalysisValidator:
         for i, record in enumerate(records):
             sample_name = record.get('Analysis Alias') or record.get('analysis_alias') or record.get('alias') or record.get('Sample Name') or f'ena_{i}'
             try:
-                model = FAANGENAAnalysis(**record)
+                model = ENAAnalysis(**record)
                 results['valid_enas'].append({
                     'index': i,
                     'sample_name': sample_name,
