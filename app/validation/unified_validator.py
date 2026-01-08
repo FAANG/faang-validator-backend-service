@@ -14,7 +14,8 @@ from app.validation.sample.pool_of_specimens_validator import PoolOfSpecimensVal
 from app.validation.sample.cell_specimen_validator import CellSpecimenValidator
 from app.validation.sample.cell_culture_validator import CellCultureValidator
 from app.validation.sample.cell_line_validator import CellLineValidator
-from app.validation.sample.metadata_validator import SubmissionValidator, PersonValidator, OrganizationValidator
+from app.validation.sample.metadata_validator import SubmissionValidator, PersonValidator, OrganizationValidator, \
+    AnalysisSubmissionValidator
 from app.validation.experiment_validator import ChipSeqInputDNAValidator, ChipSeqDNABindingProteinsValidator, RNASeqValidator, RNASeqValidator
 from app.validation.analysis.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, ENAAnalysisValidator
 from app.validation.sample.generic_validator_classes import (
@@ -228,12 +229,12 @@ def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> Ba
 
 class UnifiedFAANGValidator:
     def __init__(self):
-        # shared validator instances
+        # shared validator instances - samples
         self.shared_ontology_validator = OntologyValidator(cache_enabled=True)
         self.shared_relationship_validator = RelationshipValidator()
 
         # sample validators - pass shared instances
-        self.validators = {
+        self.sample_validators = {
             'organism': OrganismValidator(
                 ontology_validator=self.shared_ontology_validator,
                 relationship_validator=self.shared_relationship_validator
@@ -275,15 +276,21 @@ class UnifiedFAANGValidator:
                 relationship_validator=self.shared_relationship_validator
             )
         }
-        self.supported_sample_types = set(self.validators.keys())
+        self.supported_sample_types = set(self.sample_validators.keys())
 
-        # metadata validators
+        # metadata validators - samples
         self.metadata_validators = {
             'submission': SubmissionValidator(),
             'person': PersonValidator(),
             'organization': OrganizationValidator()
         }
         self.supported_metadata_types = set(self.metadata_validators.keys())
+
+        # metadata validators - analyses
+        self.analysis_metadata_validators = {
+            'submission': AnalysisSubmissionValidator(),
+        }
+        self.supported_analysis_metadata_types = set(self.analysis_metadata_validators.keys())
 
         # experiment validators (keys must be lowercase with spaces)
         self.experiment_validators = {
@@ -293,11 +300,11 @@ class UnifiedFAANGValidator:
         }
         self.supported_experiment_types = set(self.experiment_validators.keys())
 
-        # analysis validators
+         # analysis validators
         self.analysis_validators = {
+            'ena': ENAAnalysisValidator(),
             'eva': EVAAnalysisValidator(),
-            'faang': FAANGAnalysisValidator(),
-            'ena': ENAAnalysisValidator()
+            'faang': FAANGAnalysisValidator()
         }
         self.supported_analysis_types = set(self.analysis_validators.keys())
 
@@ -365,10 +372,10 @@ class UnifiedFAANGValidator:
 
     @cprofiled()
     def validate_all_records(
-            self,
-            data: Dict[str, List[Dict[str, Any]]],
-            validate_relationships: bool = True,
-            validate_ontology_text: bool = True
+        self,
+        data: Dict[str, List[Dict[str, Any]]],
+        validate_relationships: bool = True,
+        validate_ontology_text: bool = True
     ) -> Dict[str, Any]:
 
         all_results = {
@@ -398,73 +405,69 @@ class UnifiedFAANGValidator:
                 'valid_analyses': 0,
                 'invalid_analyses': 0
             },
-            'results_by_type': {},
+            'sample_results': {},
             'metadata_results': {},
             'experiment_results': {},
             'analysis_results': {},
-            'reports_by_type': {},
+            'sample_reports': {},
             'metadata_reports': {},
             'experiment_reports': {},
             'analysis_reports': {}
         }
 
-        # process each record type
-        print("All sheet names in data:", list(data.keys()))
-        print("Supported sample types:", list(self.supported_sample_types))
-        print("Supported experiment types:", list(self.supported_experiment_types))
-        print("Supported analysis types:", list(self.supported_analysis_types))
-        print("Supported metadata types:", list(self.supported_metadata_types))
-        print()
-        
-        # Track which keys have been processed to avoid double processing
-        processed_keys = set()
-        
-        for sample_type, samples in data.items():
-            if sample_type in self.supported_sample_types:
-                processed_keys.add(sample_type)
-                if not samples:
-                    print(f"No samples found for type '{sample_type}'. Skipping.")
-                    continue
+        has_samples = any(k in self.supported_sample_types for k in data.keys())
+        has_analyses = any(k in self.supported_analysis_types for k in data.keys())
 
-                print(f"Validating {len(samples)} {sample_type} samples...")
+        if has_samples:
+            print("Sample types in data:", [k for k in data.keys() if k in self.supported_sample_types])
+            for sample_type, samples in data.items():
+                if sample_type in self.supported_sample_types:
+                    if not samples:
+                        print(f"No samples found for type '{sample_type}'. Skipping.")
+                        continue
 
-                validator = self.validators[sample_type]
+                    print(f"Validating {len(samples)} {sample_type} samples...")
 
-                # validate samples with appropriate parameters
-                validation_kwargs = {
-                    'validate_relationships': validate_relationships,
-                    'all_samples': data
-                }
+                    validator = self.sample_validators[sample_type]
 
-                # Add specific parameters for sample types that support ontology text validation
-                if sample_type in ['organoid', 'specimen_from_organism']:
-                    validation_kwargs['validate_ontology_text'] = validate_ontology_text
+                    validation_kwargs = {
+                        'validate_relationships': validate_relationships,
+                        'all_samples': data
+                    }
 
-                results = validator.validate_records(samples, **validation_kwargs)
+                    if sample_type in ['organoid', 'specimen_from_organism']:
+                        validation_kwargs['validate_ontology_text'] = validate_ontology_text
 
-                # Store results
-                all_results['sample_types_processed'].append(sample_type)
-                all_results['results_by_type'][sample_type] = results
+                    results = validator.validate_records(samples, **validation_kwargs)
 
-                # Generate report
-                report = validator.generate_validation_report(results)
-                all_results['reports_by_type'][sample_type] = report
+                    # Store results
+                    all_results['sample_types_processed'].append(sample_type)
+                    all_results['sample_results'][sample_type] = results
 
-                # Update total summary
-                summary = results['summary']
-                all_results['total_summary']['total_samples'] += summary['total']
-                all_results['total_summary']['valid_samples'] += summary['valid']
-                all_results['total_summary']['invalid_samples'] += summary['invalid']
-                all_results['total_summary']['warnings'] += summary['warnings']
-                all_results['total_summary']['relationship_errors'] += summary['relationship_errors']
+                    # Generate report
+                    report = validator.generate_validation_report(results)
+                    all_results['sample_reports'][sample_type] = report
 
-        # metadata validation
+                    # Update total summary
+                    summary = results['summary']
+                    all_results['total_summary']['total_samples'] += summary['total']
+                    all_results['total_summary']['valid_samples'] += summary['valid']
+                    all_results['total_summary']['invalid_samples'] += summary['invalid']
+                    all_results['total_summary']['warnings'] += summary['warnings']
+                    all_results['total_summary']['relationship_errors'] += summary['relationship_errors']
+
+        # Process metadata types
         for metadata_type, metadata_records in data.items():
-            if metadata_type in self.supported_metadata_types:
-                processed_keys.add(metadata_type)
+            if metadata_type in self.supported_metadata_types or metadata_type in self.supported_analysis_metadata_types:
                 print(f"Validating {metadata_type} metadata...")
 
-                validator = self.metadata_validators[metadata_type]
+                if has_analyses and not has_samples and metadata_type in self.supported_analysis_metadata_types:
+                    validator = self.analysis_metadata_validators[metadata_type]
+                elif metadata_type in self.supported_metadata_types:
+                    validator = self.metadata_validators[metadata_type]
+                else:
+                    continue
+
                 results = validator.validate_records(metadata_records)
 
                 # Store results
@@ -485,96 +488,34 @@ class UnifiedFAANGValidator:
                     # If there's an error (no data), still count it
                     all_results['metadata_summary']['invalid_metadata'] += 1
 
-        # experiment validation
-        print("\nChecking experiments...")
-        for experiment_type, experiment_records in data.items():
-            # Skip if already processed as sample or metadata
-            if experiment_type in processed_keys:
-                print(f"  Skipping '{experiment_type}' - already processed as sample/metadata")
-                continue
-                
-            # Normalize experiment type name (handle both spaces and underscores)
-            normalized_type = experiment_type.replace("_", " ").lower().strip()
-            
-            if normalized_type in self.supported_experiment_types:
-                processed_keys.add(experiment_type)
-                if not experiment_records:
-                    print(f"No experiments found for type '{experiment_type}'. Skipping.")
-                    continue
+        # Process analysis types
+        if has_analyses:
+            print("Analysis types in data:", [k for k in data.keys() if k in self.supported_analysis_types])
+            for analysis_type, analyses in data.items():
+                if analysis_type in self.supported_analysis_types:
+                    if not analyses:
+                        print(f"No analyses found for type '{analysis_type}'. Skipping.")
+                        continue
 
-                print(f"Validating {len(experiment_records)} {normalized_type} experiments...")
+                    print(f"Validating {len(analyses)} {analysis_type} analyses...")
 
-                validator = self.experiment_validators[normalized_type]
-                results = validator.validate_records(experiment_records)
+                    validator = self.analysis_validators[analysis_type]
+                    results = validator.validate_records(analyses)
 
-                # Store results (use original key for consistency)
-                all_results['experiment_types_processed'].append(experiment_type)
-                all_results['experiment_results'][experiment_type] = results
-                # Also store in results_by_type for frontend compatibility
-                all_results['results_by_type'][experiment_type] = results
+                    # Store results
+                    all_results['analysis_types_processed'].append(analysis_type)
+                    all_results['analysis_results'][analysis_type] = results
 
-                # Generate report
-                report = validator.generate_validation_report(results)
-                all_results['experiment_reports'][experiment_type] = report
+                    # Generate report
+                    report = validator.generate_validation_report(results)
+                    all_results['analysis_reports'][analysis_type] = report
 
-                # Update experiment summary (only if no error)
-                if 'error' not in results:
-                    summary = results['summary']
-                    all_results['experiment_summary']['total_experiments'] += summary['total']
-                    all_results['experiment_summary']['valid_experiments'] += summary['valid']
-                    all_results['experiment_summary']['invalid_experiments'] += summary['invalid']
-                else:
-                    # If there's an error (no data), still count it
-                    all_results['experiment_summary']['invalid_experiments'] += 1
-            else:
-                # Check if it looks like an experiment type (but not supported)
-                if normalized_type in ['rna-seq', 'wgs', 'scrna-seq', 'hi-c', 'dnase-seq', 'bs-seq', 'em-seq', 'atac-seq', 'snatac-seq', 'cage-seq']:
-                    print(f"  WARNING: Experiment type '{experiment_type}' is not yet supported. Supported types: {list(self.supported_experiment_types)}")
-                elif normalized_type not in ['study', 'run', 'experiment ena', 'faang field values']:
-                    # Unknown type, might be an experiment
-                    print(f"  INFO: Unknown type '{experiment_type}' - skipping (not in supported experiment types)")
-
-        # analysis validation
-        print("\nChecking analyses...")
-        for analysis_type, analysis_records in data.items():
-            # Skip if already processed
-            if analysis_type in processed_keys:
-                print(f"  Skipping '{analysis_type}' - already processed")
-                continue
-                
-            # Normalize analysis type name (handle both spaces and underscores)
-            normalized_type = analysis_type.replace("_", " ").lower().strip()
-            
-            if normalized_type in self.supported_analysis_types:
-                processed_keys.add(analysis_type)
-                if not analysis_records:
-                    print(f"No analyses found for type '{analysis_type}'. Skipping.")
-                    continue
-
-                print(f"Validating {len(analysis_records)} {normalized_type} analyses...")
-
-                validator = self.analysis_validators[normalized_type]
-                results = validator.validate_records(analysis_records)
-
-                # Store results
-                all_results['analysis_types_processed'].append(analysis_type)
-                all_results['analysis_results'][analysis_type] = results
-                # Also store in results_by_type for frontend compatibility
-                all_results['results_by_type'][analysis_type] = results
-
-                # Generate report
-                report = validator.generate_validation_report(results)
-                all_results['analysis_reports'][analysis_type] = report
-
-                # Update analysis summary (only if no error)
-                if 'error' not in results:
+                    # Update analysis summary
                     summary = results['summary']
                     all_results['analysis_summary']['total_analyses'] += summary['total']
                     all_results['analysis_summary']['valid_analyses'] += summary['valid']
                     all_results['analysis_summary']['invalid_analyses'] += summary['invalid']
-                else:
-                    # If there's an error (no data), still count it
-                    all_results['analysis_summary']['invalid_analyses'] += 1
+                    all_results['analysis_summary']['warnings'] += summary['warnings']
 
         return all_results
 
@@ -590,7 +531,7 @@ class UnifiedFAANGValidator:
         # Individual sample reports
         if validation_results['sample_types_processed']:
             for sample_type in validation_results['sample_types_processed']:
-                report_lines.append(f"\n{validation_results['reports_by_type'][sample_type]}")
+                report_lines.append(f"\n{validation_results['sample_reports'][sample_type]}")
                 report_lines.append("\n" + "-" * 60)
 
         # Individual experiment reports
@@ -599,7 +540,7 @@ class UnifiedFAANGValidator:
                 report_lines.append(f"\n{validation_results['experiment_reports'][experiment_type]}")
                 report_lines.append("\n" + "-" * 60)
 
-        # Individual analysis reports
+        # Analysis reports
         if validation_results.get('analysis_types_processed'):
             for analysis_type in validation_results['analysis_types_processed']:
                 report_lines.append(f"\n{validation_results['analysis_reports'][analysis_type]}")
@@ -611,10 +552,10 @@ class UnifiedFAANGValidator:
         biosample_exports = {}
 
         sample_types = validation_results.get('sample_types_processed', []) or []
-        results_by_type = validation_results.get('results_by_type', {}) or {}
+        sample_reports = validation_results.get('sample_reports', {}) or {}
 
         for sample_type in sample_types:
-            results = results_by_type.get(sample_type, {}) or {}
+            results = sample_reports.get(sample_type, {}) or {}
 
             st_key = sample_type.replace(" ", "_")
             valid_samples_key = f'valid_{st_key}s'
@@ -641,8 +582,8 @@ class UnifiedFAANGValidator:
 
                 # Get organism samples for reference (needed for specimen samples)
                 organism_samples = {}
-                if 'organism' in results_by_type:
-                    org_results = results_by_type.get('organism', {}) or {}
+                if 'organism' in sample_reports:
+                    org_results = sample_reports.get('organism', {}) or {}
                     org_valid_key = 'valid_organisms'
                     if org_valid_key in org_results:
                         for org_sample in org_results[org_valid_key]:
@@ -726,8 +667,8 @@ class UnifiedFAANGValidator:
                                         # Get from first specimen sample, then from its parent organism
                                         # Find specimen sample in results
                                         # Try both formats: with spaces and with underscores
-                                        specimen_results = results_by_type.get('specimen from organism',
-                                                                               {}) or results_by_type.get(
+                                        specimen_results = sample_reports.get('specimen from organism',
+                                                                               {}) or sample_reports.get(
                                             'specimen_from_organism', {}) or {}
                                         specimen_valid_key = 'valid_specimen_from_organisms'
                                         print(
@@ -817,7 +758,8 @@ class UnifiedFAANGValidator:
             'sample_types': list(self.supported_sample_types),
             'metadata_types': list(self.supported_metadata_types),
             'experiment_types': list(self.supported_experiment_types),
-            'analysis_types': list(self.supported_analysis_types)
+            'analysis_types': list(self.supported_analysis_types),
+            'analysis_metadata_types': list(self.supported_analysis_metadata_types)
         }
 
     def submit_to_biosamples(
