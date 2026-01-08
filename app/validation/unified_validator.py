@@ -16,7 +16,7 @@ from app.validation.sample.cell_culture_validator import CellCultureValidator
 from app.validation.sample.cell_line_validator import CellLineValidator
 from app.validation.sample.metadata_validator import SubmissionValidator, PersonValidator, OrganizationValidator
 from app.validation.experiment_validator import ChipSeqInputDNAValidator, ChipSeqDNABindingProteinsValidator, RNASeqValidator, RNASeqValidator
-from app.validation.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, ENAAnalysisValidator
+from app.validation.analysis.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, ENAAnalysisValidator
 from app.validation.sample.generic_validator_classes import (
     collect_ontology_terms_from_data,
     OntologyValidator,
