@@ -1,13 +1,17 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "description": "Ruleset for assay type is 'ChIRP-seq'.",
-  "title": "FAANG experiment metadata rules for 'ChIRP-seq' Hybridisation Control",
-  "name": "faang_experiments_chirp-seq_hybridisation_control.metadata_rules",
+  "description": "Ruleset for assay type is 'ChIP-seq' and experiment target is leaf node descendant of 'SO_0001700'.",
+  "title": "FAANG experiment metadata rules for 'ChIP-seq'",
+  "name": "faang_experiments_chip-seq_dna-binding_proteins.metadata_rules",
   "$async": true,
   "type": "object",
   "required": [
-    "experiment_target",
-    "chip_protocol"
+    "chip_target",
+    "chip_antibody_provider",
+    "chip_antibody_catalog",
+    "chip_antibody_lot",
+    "library_generation_max_fragment_size_range",
+    "library_generation_min_fragment_size_range"
   ],
   "properties": {
     "describedBy": {
@@ -19,100 +23,63 @@
       "pattern": "^[0-9]{1,}.[0-9]{1,}.[0-9]{1,}$",
       "example": "4.6.1"
     },
-    "experiments_core": {
-      "description": "Core experiments-level information.",
+    "chip_target": {
       "type": "object",
-      "$ref": "core/experiments/faang_experiments_core.metadata_rules.json"
-    },
-    "chirp_target": {
-      "type": "object",
-      "name": "ChIRP target",
-      "description": "None",
+      "name": "chip target",
+      "description": "The target of the ChIP-seq experiment e.g. H3K4Me3, H3K4Me1, H3K27Me3, H3K27Ac, CTCF. If your target is not in the list, please contact the faang-dcc helpdesk.",
       "required": ["text", "term"],
       "properties": {
         "text": {
           "type": "string"
         },
         "term": {
-          "type": "string",
-          "enum": [
-            "GO:0003682",
-            "restricted access"
-          ]
-        },
-        "mandatory": {
-          "const": "mandatory"
-        },
-        "ontology_name": {
-          "type": "string",
-          "enum": ["GO"]
-        }
-      }
-    },
-    "chirp_protocol": {
-      "type": "object",
-      "name": "ChIRP protocol",
-      "description": "Link to the ChIRP protocol used.",
-      "required": ["value"],
-      "properties": {
-        "value": {
           "oneOf": [
             {
               "type": "string",
-              "format": "uri"
+              "enum": [
+                "OMIT:0038500",
+                "NCIT:C17804",
+                "NCIT:C34071",
+                "restricted access"]
             },
             {
-              "const": "restricted access"
+              "type": "string",
+              "graph_restriction": {
+                "ontologies": ["obo:chebi"],
+                "classes": ["CHEBI:15358"],
+                "relations": ["rdfs:subClassOf"],
+                "direct": false,
+                "include_self": false
+              }
             }
           ]
         },
         "mandatory": {
           "const": "mandatory"
-        }
-      }
-    },
-    "chirp_control_target": {
-      "type": "object",
-      "name": "ChIRP control target",
-      "description": "None",
-      "required": ["text", "term"],
-      "properties": {
-        "text": {
-          "type": "string"
-        },
-        "term": {
-          "type": "string",
-          "enum": [
-            "None",
-            "restricted access"
-          ]
-        },
-        "mandatory": {
-          "const": "mandatory"
         },
         "ontology_name": {
           "type": "string",
-          "enum": ["None"]
+          "enum": ["CHEBI", "OMIT", "NCIT"]
         }
       }
     },
     "control_experiment": {
       "type": "object",
-      "name": "control experiment input",
-      "description": "Experiment alias (in this submission) or ENA experiment accession (if submitted previously) of the ChIRP-seq input experiment which acts as the control/background for the analysis.",
+      "name": "control experiment",
+      "description": "Experiment alias (in this submission) or ENA experiment accession (if submitted previously) of the ChIP-seq input DNA experiment which acts as the control/background for the analysis.",
       "required": ["value"],
       "properties": {
         "value": {
           "type": "string"
         },
         "mandatory": {
-          "const": "mandatory"
+          "const": "recommended"
         }
       }
     },
-    "chirp_control_antibody_provider": {
+    "chip_antibody_provider": {
       "type": "object",
-      "name": "ChIRP control antibody provider",
+      "name": "chip antibody provider",
       "description": "The name of the company, laboratory or person that provided the antibody e.g. Diagneode.",
       "required": ["value"],
       "properties": {
@@ -124,10 +91,24 @@
         }
       }
     },
-    "chirp_control_antibody_catalog": {
+    "chip_antibody_catalog": {
       "type": "object",
-      "name": "ChIRP control antibody catalog",
+      "name": "chip antibody catalog",
       "description": "The catalog from which the antibody was purchased e.g. pAb-003-050.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "chip_antibody_lot": {
+      "type": "object",
+      "name": "chip antibody lot",
+      "description": "The lot identifier of the antibody e.g. A5051-001P.",
       "required": ["value"],
       "properties": {
         "value": {

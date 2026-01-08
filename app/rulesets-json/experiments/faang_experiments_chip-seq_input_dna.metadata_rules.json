@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Ruleset for assay type is 'ChIP-seq' and experiment target is 'input DNA'.",
+  "title": "FAANG experiment metadata rules for 'ChIP-seq'",
+  "name": "faang_experiments_chip-seq_input_dna.metadata_rules",
+  "$async": true,
+  "type": "object",
+  "required": [
+    "library_generation_max_fragment_size_range",
+    "library_generation_min_fragment_size_range"
+  ],
+  "properties": {
+    "describedBy": {
+      "const": "https://github.com/FAANG/faang-metadata/blob/master/docs/faang_experiment_metadata.md"
+    },
+    "schema_version": {
+      "description": "The version number of the schema in major.minor.patch format.",
+      "type": "string",
+      "pattern": "^[0-9]{1,}.[0-9]{1,}.[0-9]{1,}$",
+      "example": "4.6.1"
+    },
+    "library_generation_max_fragment_size_range": {
+      "type": "object",
+      "name": "library generation max fragment size range",
+      "description": "The maximum fragment size range of the preparation.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {"const": "restricted access"}
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    },
+    "library_generation_min_fragment_size_range": {
+      "type": "object",
+      "name": "library generation min fragment size range",
+      "description": "The minimum fragment size range of the preparation.",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            {"type": "number"},
+            {"const": "restricted access"}
+          ]
+        },
+        "mandatory": {
+          "const": "mandatory"
+        }
+      }
+    }
+  }
+}
