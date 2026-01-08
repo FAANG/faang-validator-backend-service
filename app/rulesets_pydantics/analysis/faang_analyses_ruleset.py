@@ -3,39 +3,10 @@ from typing import List, Union, Literal, Optional
 from app.validation.validation_utils import strip_and_convert_empty_to_none, validate_protocol_url
 
 
-class SecondaryProjectItem(BaseModel):
-    """Model for secondary project item in array."""
-    value: Literal[
-        "AQUA-FAANG",
-        "GENE-SWitCH",
-        "BovReg",
-        "Bovine-FAANG",
-        "EFFICACE",
-        "GEroNIMO",
-        "RUMIGEN",
-        "Equine-FAANG",
-        "Holoruminant",
-        "USPIGFAANG"
-    ] = Field(..., alias="value")
-
-    @field_validator('value', mode='before')
-    def validate_secondary_project_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        return v
-
-
-class FAANGFAANGAnalysis(BaseModel):
-    """
-    Pydantic model for FAANG analysis metadata.
-    Based on faang_analyses_faang.metadata_rules.json
-    """
+class FAANGAnalysis(BaseModel):
     # required fields
-    project: Literal["FAANG", "restricted access"] = Field(
-        ...,
-        alias="Project",
-        description="State that the project is 'FAANG'."
-    )
+    project: Literal["FAANG", "restricted access"] = Field(..., alias="Project")
+
     assay_type: Literal[
         "ATAC-seq",
         "ChIP-seq",
@@ -53,38 +24,43 @@ class FAANGFAANGAnalysis(BaseModel):
         "restricted access"
     ] = Field(
         ...,
-        alias="Assay Type",
-        description="The type of experiment analysis data was derived from."
-    )
+        alias="Assay Type")
+
     analysis_protocol: Union[str, Literal["restricted access"]] = Field(
         ...,
-        alias="Analysis Protocol",
-        description="Link to the description of the analysis protocol."
-    )
+        alias="Analysis Protocol")
 
-    # required fields (alias has mandatory: "mandatory" in JSON)
     alias: str = Field(
         ...,
-        alias="Alias",
-        description="The alias of the analysis."
+        alias="Alias"
     )
-    secondary_project: Optional[List[SecondaryProjectItem]] = Field(
+
+    secondary_project: Optional[List[Literal[
+        "AQUA-FAANG",
+        "GENE-SWitCH",
+        "BovReg",
+        "Bovine-FAANG",
+        "EFFICACE",
+        "GEroNIMO",
+        "RUMIGEN",
+        "Equine-FAANG",
+        "Holoruminant",
+        "USPIGFAANG"
+    ]]] = Field(
         None,
-        alias="Secondary Project",
-        description="State the secondary project(s) that this data belongs to."
-    )
-    analysis_code: Optional[Union[HttpUrl, Literal["restricted access"]]] = Field(
+        alias="Secondary Project")
+
+    # optional fields
+    analysis_code: Optional[Union[str, Literal["restricted access"]]] = Field(
         None,
         alias="Analysis Code",
-        description="Link to the repository that contains the code used in the analysis.",
-        json_schema_extra={"recommended": True}
     )
+
     analysis_code_version: Optional[Union[str, Literal["restricted access"]]] = Field(
         None,
         alias="Analysis Code Version",
-        description="Version of the analysis code used in the analysis.",
-        json_schema_extra={"recommended": True}
     )
+
     reference_genome: Optional[Literal[
         "Sscrofa11.1",
         "EquCab3.0",
@@ -101,71 +77,50 @@ class FAANGFAANGAnalysis(BaseModel):
     ]] = Field(
         None,
         alias="Reference Genome",
-        description="The reference genome used in the analysis.",
         json_schema_extra={"recommended": True}
     )
-    nextflow_config_url: Optional[HttpUrl] = Field(
+
+    nextflow_config_url: Optional[Union[str, Literal["restricted access"]]] = Field(
         None,
-        alias="Nextflow Config Url",
-        description="Url of uploaded nextflow configuration file."
-    )
-    nextflow_spreadsheet_url: Optional[HttpUrl] = Field(
-        None,
-        alias="Nextflow Spreadsheet Url",
-        description="Url of uploaded nextflow spreadsheet file."
+        alias="Nextflow Config Url"
     )
 
-    @field_validator('project', 'assay_type', 'analysis_protocol', mode='before')
-    def validate_object_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        return v
+    nextflow_spreadsheet_url: Optional[Union[str, Literal["restricted access"]]] = Field(
+        None,
+        alias="Nextflow Spreadsheet Url"
+    )
 
-    @field_validator('analysis_protocol')
-    def validate_analysis_protocol_url(cls, v):
+
+    @field_validator('analysis_protocol', 'analysis_code', 'nextflow_config_url', 'nextflow_spreadsheet_url')
+    def validate_url_fields(cls, v):
         return validate_protocol_url(v, allow_restricted=True)
 
-    @field_validator('alias', mode='before')
-    def validate_alias_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        if not v or v == "":
-            return None
-        return v
+    @field_validator('alias')
+    def validate_alias_not_empty(cls, v):
+        if not v or (isinstance(v, str) and v.strip() == ""):
+            raise ValueError("Alias is required and cannot be empty")
+        return v.strip() if isinstance(v, str) else v
 
     @field_validator('secondary_project', mode='before')
-    def validate_secondary_project_array(cls, v):
+    def validate_secondary_project(cls, v):
+        if not v:
+            return None
+
         if isinstance(v, list):
-            return [item if isinstance(item, dict) else {'value': item} for item in v]
-        return v
+            result = [item.strip() for item in v if item and str(item).strip()]
+            return result if result else None
 
-    @field_validator('analysis_code', 'analysis_code_version', mode='before')
-    def validate_optional_object_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        if not v or v == "":
-            return None
-        return v
+        if isinstance(v, str) and v.strip():
+            return [v.strip()]
 
-    @field_validator('reference_genome', mode='before')
-    def validate_reference_genome_value(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            return v['value']
-        if not v or v == "":
-            return None
-        return v
+        return None
 
-    @field_validator('nextflow_config_url', 'nextflow_spreadsheet_url', mode='before')
-    def validate_nextflow_urls(cls, v):
-        if isinstance(v, dict) and 'value' in v:
-            v = v['value']
-        if not v or v == "":
-            return None
-        return v
+    @field_validator('analysis_code_version', 'reference_genome', mode='before')
+    def convert_empty_strings_to_none(cls, v):
+        return strip_and_convert_empty_to_none(v)
 
     class Config:
         populate_by_name = True
         validate_default = True
         validate_assignment = True
         extra = "forbid"
-
