@@ -670,11 +670,11 @@ class UnifiedFAANGValidator:
 
                         biosample_data = validator.export_to_biosample_format(model)
 
-                        # For specimen and pool samples, if organism/species are missing, try to get from parent organism
+                        # For specimen, pool, and cell specimen samples, if organism/species are missing, try to get from parent organism
                         # Check the sample data for derived_from field (not relationships in biosample_data)
                         # Note: sample_type can be 'specimen from organism' (with spaces) or 'specimen_from_organism' (with underscores)
                         normalized_sample_type = sample_type.replace(" ", "_")
-                        if normalized_sample_type in ['specimen_from_organism', 'pool_of_specimens']:
+                        if normalized_sample_type in ['specimen_from_organism', 'pool_of_specimens', 'cell_specimen']:
                             characteristics = biosample_data.get('characteristics', {})
                             if 'organism' not in characteristics or 'species' not in characteristics:
                                 # Try to get from derived_from field in the sample data
@@ -712,6 +712,7 @@ class UnifiedFAANGValidator:
                                     parent_biosample_data = None
 
                                     if normalized_sample_type == 'specimen_from_organism':
+
                                         # Get from organism sample
                                         if parent_name in organism_samples:
                                             parent_model = organism_samples[parent_name]
@@ -723,6 +724,7 @@ class UnifiedFAANGValidator:
                                                     parent_model)
 
                                     elif normalized_sample_type == 'pool_of_specimens':
+
                                         # Get from first specimen sample, then from its parent organism
                                         # Find specimen sample in results
                                         # Try both formats: with spaces and with underscores
@@ -732,6 +734,73 @@ class UnifiedFAANGValidator:
                                         specimen_valid_key = 'valid_specimen_from_organisms'
                                         print(
                                             f"  Pool sample {sample_name_export}: Looking for parent specimen '{parent_name}' in {specimen_valid_key}")
+                                        print(
+                                            f"  Available specimen samples: {[s.get('sample_name') for s in specimen_results.get(specimen_valid_key, [])][:5]}")
+                                        if specimen_valid_key in specimen_results:
+                                            found_specimen = False
+                                            for spec_sample in specimen_results[specimen_valid_key]:
+                                                if spec_sample.get('sample_name') == parent_name:
+                                                    found_specimen = True
+                                                    print(f"  Found parent specimen: {parent_name}")
+                                                    spec_model = spec_sample.get('model')
+                                                    if isinstance(spec_model, dict):
+                                                        spec_validator = self.validators.get('specimen_from_organism')
+                                                        if spec_validator:
+                                                            spec_model = _reconstruct_model_from_dict(
+                                                                spec_validator.get_model_class(), spec_model)
+
+                                                    # Get organism from specimen's parent
+                                                    spec_data = spec_sample.get('data', {})
+                                                    spec_derived_from = spec_data.get('Derived From') or spec_data.get(
+                                                        'derived_from') or []
+                                                    if not spec_derived_from and hasattr(spec_model, 'derived_from'):
+                                                        spec_derived_from = getattr(spec_model, 'derived_from', [])
+
+                                                    spec_parent_name = None
+                                                    if spec_derived_from:
+                                                        if isinstance(spec_derived_from, list) and len(
+                                                                spec_derived_from) > 0:
+                                                            first = spec_derived_from[0]
+                                                            if isinstance(first, dict):
+                                                                spec_parent_name = first.get('value') or first.get(
+                                                                    'text') or first.get('target')
+                                                            else:
+                                                                spec_parent_name = str(first)
+                                                        elif isinstance(spec_derived_from, str):
+                                                            spec_parent_name = spec_derived_from
+
+                                                    # Get organism from specimen's parent organism
+                                                    if spec_parent_name and spec_parent_name in organism_samples:
+                                                        print(f"  Found parent organism: {spec_parent_name}")
+                                                        parent_model = organism_samples[spec_parent_name]
+                                                        if hasattr(parent_model, 'organism') and hasattr(parent_model,
+                                                                                                         'organism_term_source_id'):
+                                                            from app.validation.sample.organism_validator import \
+                                                                OrganismValidator
+                                                            org_validator = OrganismValidator()
+                                                            parent_biosample_data = org_validator.export_to_biosample_format(
+                                                                parent_model)
+                                                            print(
+                                                                f"  Got organism data from parent: {parent_biosample_data.get('characteristics', {}).get('organism')}")
+                                                    else:
+                                                        print(
+                                                            f"  Parent organism '{spec_parent_name}' not found in organism_samples")
+                                                    break
+                                            if not found_specimen:
+                                                print(
+                                                    f"  Parent specimen '{parent_name}' not found in specimen_results")
+
+                                    elif normalized_sample_type == 'cell_specimen':
+                                        # Get from parent specimen sample, then from its parent organism
+                                        # Cell specimen is derived from specimen_from_organism
+                                        # Find specimen sample in results
+                                        # Try both formats: with spaces and with underscores
+                                        specimen_results = results_by_type.get('specimen from organism',
+                                                                               {}) or results_by_type.get(
+                                            'specimen_from_organism', {}) or {}
+                                        specimen_valid_key = 'valid_specimen_from_organisms'
+                                        print(
+                                            f"  Cell specimen {sample_name_export}: Looking for parent specimen '{parent_name}' in {specimen_valid_key}")
                                         print(
                                             f"  Available specimen samples: {[s.get('sample_name') for s in specimen_results.get(specimen_valid_key, [])][:5]}")
                                         if specimen_valid_key in specimen_results:
@@ -799,6 +868,7 @@ class UnifiedFAANGValidator:
                             'sample_name': valid_sample['sample_name'],
                             'biosample_format': biosample_data
                         })
+
                         print(f"  [{idx + 1}/{len(results[valid_samples_key])}] Exported: {sample_name_export}")
                     except Exception as e:
                         print(
