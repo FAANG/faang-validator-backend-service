@@ -50,17 +50,15 @@ class FAANGAnalysis(BaseModel):
         None,
         alias="Secondary Project")
 
-    # recommended fields
+    # optional fields
     analysis_code: Optional[Union[str, Literal["restricted access"]]] = Field(
         None,
         alias="Analysis Code",
-        json_schema_extra={"recommended": True}
     )
 
     analysis_code_version: Optional[Union[str, Literal["restricted access"]]] = Field(
         None,
         alias="Analysis Code Version",
-        json_schema_extra={"recommended": True}
     )
 
     reference_genome: Optional[Literal[
@@ -82,7 +80,6 @@ class FAANGAnalysis(BaseModel):
         json_schema_extra={"recommended": True}
     )
 
-    # optional fields
     nextflow_config_url: Optional[Union[str, Literal["restricted access"]]] = Field(
         None,
         alias="Nextflow Config Url"
