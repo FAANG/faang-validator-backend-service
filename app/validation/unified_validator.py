@@ -403,7 +403,8 @@ class UnifiedFAANGValidator:
             'analysis_summary': {
                 'total_analyses': 0,
                 'valid_analyses': 0,
-                'invalid_analyses': 0
+                'invalid_analyses': 0,
+                'warnings': 0
             },
             'sample_results': {},
             'metadata_results': {},
