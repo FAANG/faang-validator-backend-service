@@ -1,8 +1,8 @@
 from typing import List, Dict, Any
 from pydantic import ValidationError
-from app.rulesets_pydantics.chip_seq_input_dna_ruleset import FAANGChipSeqInputDNA
-from app.rulesets_pydantics.chip_seq_dna_binding_proteins_ruleset import FAANGChipSeqDNABindingProteins
-from app.rulesets_pydantics.rna_seq_ruleset import FAANGRNASeq
+from app.rulesets_pydantics.experiment.chip_seq_input_dna_ruleset import FAANGChipSeqInputDNA
+from app.rulesets_pydantics.experiment.chip_seq_dna_binding_proteins_ruleset import FAANGChipSeqDNABindingProteins
+from app.rulesets_pydantics.experiment.rna_seq_ruleset import FAANGRNASeq
 
 
 class ChipSeqInputDNAValidator:
