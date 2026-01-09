@@ -557,12 +557,12 @@ class UnifiedFAANGValidator:
         biosample_exports = {}
 
         sample_types = validation_results.get('sample_types_processed', []) or []
-        results_by_type = validation_results.get('results_by_type', {}) or {}
+        sample_results = validation_results.get('sample_results', {}) or {}
 
         # Get organism samples for reference
         organism_samples = {}
-        if 'organism' in results_by_type:
-            org_results = results_by_type.get('organism', {}) or {}
+        if 'organism' in sample_results:
+            org_results = sample_results.get('organism', {}) or {}
             org_valid_key = 'valid_organisms'
             if org_valid_key in org_results:
                 for org_sample in org_results[org_valid_key]:
