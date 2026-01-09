@@ -737,8 +737,8 @@ class UnifiedFAANGValidator:
                                         # Cell specimen is derived from specimen_from_organism
                                         # Find specimen sample in results
                                         # Try both formats: with spaces and with underscores
-                                        specimen_results = results_by_type.get('specimen from organism',
-                                                                               {}) or results_by_type.get(
+                                        specimen_results = sample_reports.get('specimen from organism',
+                                                                               {}) or sample_reports.get(
                                             'specimen_from_organism', {}) or {}
                                         specimen_valid_key = 'valid_specimen_from_organisms'
                                         print(
