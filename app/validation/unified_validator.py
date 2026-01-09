@@ -618,8 +618,10 @@ class UnifiedFAANGValidator:
                         # Check the sample data for derived_from field (not relationships in biosample_data)
                         # Note: sample_type can be 'specimen from organism' (with spaces) or 'specimen_from_organism' (with underscores)
                         normalized_sample_type = sample_type.replace(" ", "_")
+
                         if normalized_sample_type in ['specimen_from_organism', 'pool_of_specimens', 'cell_specimen',
                                                       'organoid']:
+
                             characteristics = biosample_data.get('characteristics', {})
                             if 'organism' not in characteristics or 'species' not in characteristics:
                                 # Try to get from derived_from field in the sample data

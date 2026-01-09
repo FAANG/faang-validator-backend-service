@@ -200,7 +200,7 @@ async def submit_to_biosamples(request: SubmissionRequest):
             )
 
         print(f"Submitting to BioSamples via Webin: mode={request.mode}")
-
+        print(f"Submitting to BioSamples via Webin: data={request.validation_results}")
         result = validator.submit_to_biosamples(
             validation_results=request.validation_results,
             webin_username=request.webin_username,
