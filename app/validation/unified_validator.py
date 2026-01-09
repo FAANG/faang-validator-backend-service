@@ -1,9 +1,7 @@
-import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional, get_args, get_origin, Union
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
-import requests
 
 from app.profiler import cprofiled
 from app.validation.sample.teleostei_embryo_validator import TeleosteiEmbryoValidator
@@ -16,9 +14,12 @@ from app.validation.sample.pool_of_specimens_validator import PoolOfSpecimensVal
 from app.validation.sample.cell_specimen_validator import CellSpecimenValidator
 from app.validation.sample.cell_culture_validator import CellCultureValidator
 from app.validation.sample.cell_line_validator import CellLineValidator
-from app.validation.sample.metadata_validator import SubmissionValidator, PersonValidator, OrganizationValidator
-from app.validation.experiment_validator import ChipSeqInputDNAValidator, ChipSeqDNABindingProteinsValidator, RNASeqValidator, RNASeqValidator
-from app.validation.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, ENAAnalysisValidator
+from app.validation.sample.metadata_validator import SubmissionValidator, PersonValidator, OrganizationValidator, \
+    AnalysisSubmissionValidator
+from app.validation.experiment_validator import ChipSeqInputDNAValidator, ChipSeqDNABindingProteinsValidator, \
+    RNASeqValidator, RNASeqValidator
+from app.validation.analysis.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, \
+    ENAAnalysisValidator
 from app.validation.sample.generic_validator_classes import (
     collect_ontology_terms_from_data,
     OntologyValidator,
@@ -230,12 +231,12 @@ def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> Ba
 
 class UnifiedFAANGValidator:
     def __init__(self):
-        # shared validator instances
+        # shared validator instances - samples
         self.shared_ontology_validator = OntologyValidator(cache_enabled=True)
         self.shared_relationship_validator = RelationshipValidator()
 
         # sample validators - pass shared instances
-        self.validators = {
+        self.sample_validators = {
             'organism': OrganismValidator(
                 ontology_validator=self.shared_ontology_validator,
                 relationship_validator=self.shared_relationship_validator
@@ -277,15 +278,23 @@ class UnifiedFAANGValidator:
                 relationship_validator=self.shared_relationship_validator
             )
         }
-        self.supported_sample_types = set(self.validators.keys())
+        self.supported_sample_types = set(self.sample_validators.keys())
 
-        # metadata validators
+        # metadata validators - samples
         self.metadata_validators = {
             'submission': SubmissionValidator(),
             'person': PersonValidator(),
             'organization': OrganizationValidator()
         }
         self.supported_metadata_types = set(self.metadata_validators.keys())
+
+        # metadata validators - analyses
+        self.analysis_metadata_validators = {
+            'submission': AnalysisSubmissionValidator(),
+        }
+
+
+        self.supported_analysis_metadata_types = set(self.analysis_metadata_validators.keys())
 
         # experiment validators (keys must be lowercase with spaces)
         self.experiment_validators = {
@@ -297,9 +306,9 @@ class UnifiedFAANGValidator:
 
         # analysis validators
         self.analysis_validators = {
+            'ena': ENAAnalysisValidator(),
             'eva': EVAAnalysisValidator(),
-            'faang': FAANGAnalysisValidator(),
-            'ena': ENAAnalysisValidator()
+            'faang': FAANGAnalysisValidator()
         }
         self.supported_analysis_types = set(self.analysis_validators.keys())
 
@@ -367,10 +376,10 @@ class UnifiedFAANGValidator:
 
     @cprofiled()
     def validate_all_records(
-            self,
-            data: Dict[str, List[Dict[str, Any]]],
-            validate_relationships: bool = True,
-            validate_ontology_text: bool = True
+        self,
+        data: Dict[str, List[Dict[str, Any]]],
+        validate_relationships: bool = True,
+        validate_ontology_text: bool = True
     ) -> Dict[str, Any]:
 
         all_results = {
@@ -398,75 +407,72 @@ class UnifiedFAANGValidator:
             'analysis_summary': {
                 'total_analyses': 0,
                 'valid_analyses': 0,
-                'invalid_analyses': 0
+                'invalid_analyses': 0,
+                'warnings': 0
             },
-            'results_by_type': {},
+            'sample_results': {},
             'metadata_results': {},
             'experiment_results': {},
             'analysis_results': {},
-            'reports_by_type': {},
+            'sample_reports': {},
             'metadata_reports': {},
             'experiment_reports': {},
             'analysis_reports': {}
         }
 
-        # process each record type
-        print("All sheet names in data:", list(data.keys()))
-        print("Supported sample types:", list(self.supported_sample_types))
-        print("Supported experiment types:", list(self.supported_experiment_types))
-        print("Supported analysis types:", list(self.supported_analysis_types))
-        print("Supported metadata types:", list(self.supported_metadata_types))
-        print()
-        
-        # Track which keys have been processed to avoid double processing
-        processed_keys = set()
-        
-        for sample_type, samples in data.items():
-            if sample_type in self.supported_sample_types:
-                processed_keys.add(sample_type)
-                if not samples:
-                    print(f"No samples found for type '{sample_type}'. Skipping.")
-                    continue
+        has_samples = any(k in self.supported_sample_types for k in data.keys())
+        has_analyses = any(k in self.supported_analysis_types for k in data.keys())
 
-                print(f"Validating {len(samples)} {sample_type} samples...")
+        if has_samples:
+            print("Sample types in data:", [k for k in data.keys() if k in self.supported_sample_types])
+            for sample_type, samples in data.items():
+                if sample_type in self.supported_sample_types:
+                    if not samples:
+                        print(f"No samples found for type '{sample_type}'. Skipping.")
+                        continue
 
-                validator = self.validators[sample_type]
+                    print(f"Validating {len(samples)} {sample_type} samples...")
 
-                # validate samples with appropriate parameters
-                validation_kwargs = {
-                    'validate_relationships': validate_relationships,
-                    'all_samples': data
-                }
+                    validator = self.sample_validators[sample_type]
 
-                # Add specific parameters for sample types that support ontology text validation
-                if sample_type in ['organoid', 'specimen_from_organism']:
-                    validation_kwargs['validate_ontology_text'] = validate_ontology_text
+                    validation_kwargs = {
+                        'validate_relationships': validate_relationships,
+                        'all_samples': data
+                    }
 
-                results = validator.validate_records(samples, **validation_kwargs)
+                    if sample_type in ['organoid', 'specimen_from_organism']:
+                        validation_kwargs['validate_ontology_text'] = validate_ontology_text
 
-                # Store results
-                all_results['sample_types_processed'].append(sample_type)
-                all_results['results_by_type'][sample_type] = results
+                    results = validator.validate_records(samples, **validation_kwargs)
 
-                # Generate report
-                report = validator.generate_validation_report(results)
-                all_results['reports_by_type'][sample_type] = report
+                    # Store results
+                    all_results['sample_types_processed'].append(sample_type)
+                    all_results['sample_results'][sample_type] = results
 
-                # Update total summary
-                summary = results['summary']
-                all_results['total_summary']['total_samples'] += summary['total']
-                all_results['total_summary']['valid_samples'] += summary['valid']
-                all_results['total_summary']['invalid_samples'] += summary['invalid']
-                all_results['total_summary']['warnings'] += summary['warnings']
-                all_results['total_summary']['relationship_errors'] += summary['relationship_errors']
+                    # Generate report
+                    report = validator.generate_validation_report(results)
+                    all_results['sample_reports'][sample_type] = report
 
-        # metadata validation
+                    # Update total summary
+                    summary = results['summary']
+                    all_results['total_summary']['total_samples'] += summary['total']
+                    all_results['total_summary']['valid_samples'] += summary['valid']
+                    all_results['total_summary']['invalid_samples'] += summary['invalid']
+                    all_results['total_summary']['warnings'] += summary['warnings']
+                    all_results['total_summary']['relationship_errors'] += summary['relationship_errors']
+
+        # Process metadata types
         for metadata_type, metadata_records in data.items():
-            if metadata_type in self.supported_metadata_types:
-                processed_keys.add(metadata_type)
+            if metadata_type in self.supported_metadata_types or metadata_type in self.supported_analysis_metadata_types:
                 print(f"Validating {metadata_type} metadata...")
 
-                validator = self.metadata_validators[metadata_type]
+                if has_analyses and not has_samples and metadata_type in self.supported_analysis_metadata_types:
+                    validator = self.analysis_metadata_validators[metadata_type]
+                elif metadata_type in self.supported_metadata_types:
+                    validator = self.metadata_validators[metadata_type]
+                else:
+                    continue
+
                 results = validator.validate_records(metadata_records)
 
                 # Store results
@@ -487,96 +493,34 @@ class UnifiedFAANGValidator:
                     # If there's an error (no data), still count it
                     all_results['metadata_summary']['invalid_metadata'] += 1
 
-        # experiment validation
-        print("\nChecking experiments...")
-        for experiment_type, experiment_records in data.items():
-            # Skip if already processed as sample or metadata
-            if experiment_type in processed_keys:
-                print(f"  Skipping '{experiment_type}' - already processed as sample/metadata")
-                continue
-                
-            # Normalize experiment type name (handle both spaces and underscores)
-            normalized_type = experiment_type.replace("_", " ").lower().strip()
-            
-            if normalized_type in self.supported_experiment_types:
-                processed_keys.add(experiment_type)
-                if not experiment_records:
-                    print(f"No experiments found for type '{experiment_type}'. Skipping.")
-                    continue
+        # Process analysis types
+        if has_analyses:
+            print("Analysis types in data:", [k for k in data.keys() if k in self.supported_analysis_types])
+            for analysis_type, analyses in data.items():
+                if analysis_type in self.supported_analysis_types:
+                    if not analyses:
+                        print(f"No analyses found for type '{analysis_type}'. Skipping.")
+                        continue
 
-                print(f"Validating {len(experiment_records)} {normalized_type} experiments...")
+                    print(f"Validating {len(analyses)} {analysis_type} analyses...")
 
-                validator = self.experiment_validators[normalized_type]
-                results = validator.validate_records(experiment_records)
+                    validator = self.analysis_validators[analysis_type]
+                    results = validator.validate_records(analyses)
 
-                # Store results (use original key for consistency)
-                all_results['experiment_types_processed'].append(experiment_type)
-                all_results['experiment_results'][experiment_type] = results
-                # Also store in results_by_type for frontend compatibility
-                all_results['results_by_type'][experiment_type] = results
+                    # Store results
+                    all_results['analysis_types_processed'].append(analysis_type)
+                    all_results['analysis_results'][analysis_type] = results
 
-                # Generate report
-                report = validator.generate_validation_report(results)
-                all_results['experiment_reports'][experiment_type] = report
+                    # Generate report
+                    report = validator.generate_validation_report(results)
+                    all_results['analysis_reports'][analysis_type] = report
 
-                # Update experiment summary (only if no error)
-                if 'error' not in results:
-                    summary = results['summary']
-                    all_results['experiment_summary']['total_experiments'] += summary['total']
-                    all_results['experiment_summary']['valid_experiments'] += summary['valid']
-                    all_results['experiment_summary']['invalid_experiments'] += summary['invalid']
-                else:
-                    # If there's an error (no data), still count it
-                    all_results['experiment_summary']['invalid_experiments'] += 1
-            else:
-                # Check if it looks like an experiment type (but not supported)
-                if normalized_type in ['rna-seq', 'wgs', 'scrna-seq', 'hi-c', 'dnase-seq', 'bs-seq', 'em-seq', 'atac-seq', 'snatac-seq', 'cage-seq']:
-                    print(f"  WARNING: Experiment type '{experiment_type}' is not yet supported. Supported types: {list(self.supported_experiment_types)}")
-                elif normalized_type not in ['study', 'run', 'experiment ena', 'faang field values']:
-                    # Unknown type, might be an experiment
-                    print(f"  INFO: Unknown type '{experiment_type}' - skipping (not in supported experiment types)")
-
-        # analysis validation
-        print("\nChecking analyses...")
-        for analysis_type, analysis_records in data.items():
-            # Skip if already processed
-            if analysis_type in processed_keys:
-                print(f"  Skipping '{analysis_type}' - already processed")
-                continue
-                
-            # Normalize analysis type name (handle both spaces and underscores)
-            normalized_type = analysis_type.replace("_", " ").lower().strip()
-            
-            if normalized_type in self.supported_analysis_types:
-                processed_keys.add(analysis_type)
-                if not analysis_records:
-                    print(f"No analyses found for type '{analysis_type}'. Skipping.")
-                    continue
-
-                print(f"Validating {len(analysis_records)} {normalized_type} analyses...")
-
-                validator = self.analysis_validators[normalized_type]
-                results = validator.validate_records(analysis_records)
-
-                # Store results
-                all_results['analysis_types_processed'].append(analysis_type)
-                all_results['analysis_results'][analysis_type] = results
-                # Also store in results_by_type for frontend compatibility
-                all_results['results_by_type'][analysis_type] = results
-
-                # Generate report
-                report = validator.generate_validation_report(results)
-                all_results['analysis_reports'][analysis_type] = report
-
-                # Update analysis summary (only if no error)
-                if 'error' not in results:
+                    # Update analysis summary
                     summary = results['summary']
                     all_results['analysis_summary']['total_analyses'] += summary['total']
                     all_results['analysis_summary']['valid_analyses'] += summary['valid']
                     all_results['analysis_summary']['invalid_analyses'] += summary['invalid']
-                else:
-                    # If there's an error (no data), still count it
-                    all_results['analysis_summary']['invalid_analyses'] += 1
+                    all_results['analysis_summary']['warnings'] += summary['warnings']
 
         return all_results
 
@@ -592,7 +536,7 @@ class UnifiedFAANGValidator:
         # Individual sample reports
         if validation_results['sample_types_processed']:
             for sample_type in validation_results['sample_types_processed']:
-                report_lines.append(f"\n{validation_results['reports_by_type'][sample_type]}")
+                report_lines.append(f"\n{validation_results['sample_reports'][sample_type]}")
                 report_lines.append("\n" + "-" * 60)
 
         # Individual experiment reports
@@ -601,324 +545,13 @@ class UnifiedFAANGValidator:
                 report_lines.append(f"\n{validation_results['experiment_reports'][experiment_type]}")
                 report_lines.append("\n" + "-" * 60)
 
-        # Individual analysis reports
+        # Analysis reports
         if validation_results.get('analysis_types_processed'):
             for analysis_type in validation_results['analysis_types_processed']:
                 report_lines.append(f"\n{validation_results['analysis_reports'][analysis_type]}")
                 report_lines.append("\n" + "-" * 60)
 
         return "\n".join(report_lines)
-
-    def _fetch_from_biosamples_api(self, biosample_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Fetch biosample data from the public BioSamples API.
-        
-        Args:
-            biosample_id: BioSamples accession ID (e.g., "SAMEA123456" or "SAMN123456")
-            
-        Returns:
-            Dict containing biosample data with characteristics, or None if fetch fails
-        """
-        try:
-            # BioSamples public API endpoint
-            # For public samples: https://www.ebi.ac.uk/biosamples/samples/{accession}
-            api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
-            
-            print(f"    Fetching from BioSamples API: {api_url}")
-            response = requests.get(api_url, timeout=10)
-            
-            if response.status_code == 200:
-                biosample_json = response.json()
-                
-                # Extract characteristics from BioSamples JSON format
-                # BioSamples API returns data in a specific structure
-                characteristics = {}
-                
-                # The structure can vary, but typically characteristics are in 'characteristics' field
-                # BioSamples API can return characteristics as a dict or list of dicts
-                api_characteristics = biosample_json.get('characteristics', {})
-                
-                # Handle case where characteristics might be a list
-                if isinstance(api_characteristics, list):
-                    # Convert list format to dict format for easier processing
-                    characteristics_dict = {}
-                    for char_item in api_characteristics:
-                        if isinstance(char_item, dict) and 'type' in char_item and 'value' in char_item:
-                            char_type = char_item['type']
-                            characteristics_dict[char_type] = char_item.get('values', [char_item['value']])
-                    api_characteristics = characteristics_dict
-                
-                if api_characteristics:
-                    # Extract organism and species
-                    organism_chars = None
-                    species_chars = None
-                    
-                    # BioSamples uses different field names, check common variations
-                    for char_name, char_values in api_characteristics.items():
-                        char_name_lower = char_name.lower().strip()
-                        # Check for organism variations
-                        if char_name_lower in ['organism', 'organism name', 'organism_name', 'organismname']:
-                            organism_chars = char_values
-                        # Check for species variations
-                        elif char_name_lower in ['species', 'organism species', 'organism_species', 'organismspecies']:
-                            species_chars = char_values
-                    
-                    # Format organism information
-                    if organism_chars:
-                        # BioSamples format can be:
-                        # - List: [{"text": "...", "ontologyTerms": ["..."]}, ...]
-                        # - Dict: {"text": "...", "ontologyTerms": [...]}
-                        # - List of strings: ["Bos taurus"]
-                        # - Single string: "Bos taurus"
-                        
-                        organism_entry = None
-                        if isinstance(organism_chars, list) and len(organism_chars) > 0:
-                            first_item = organism_chars[0]
-                            if isinstance(first_item, dict):
-                                organism_entry = first_item
-                            elif isinstance(first_item, str):
-                                # Simple string value, try to find ontology terms elsewhere or use as-is
-                                organism_entry = {'text': first_item, 'ontologyTerms': []}
-                        elif isinstance(organism_chars, dict):
-                            organism_entry = organism_chars
-                        elif isinstance(organism_chars, str):
-                            organism_entry = {'text': organism_chars, 'ontologyTerms': []}
-                        
-                        if organism_entry:
-                            # Ensure ontologyTerms is a list
-                            ontology_terms = organism_entry.get('ontologyTerms', [])
-                            if isinstance(ontology_terms, str):
-                                ontology_terms = [ontology_terms]
-                            
-                            characteristics['organism'] = [{
-                                'text': organism_entry.get('text', str(organism_entry.get('value', ''))),
-                                'ontologyTerms': ontology_terms
-                            }]
-                            # If species not found separately, use organism as species (will be overridden if species_chars exists)
-                            if not species_chars:
-                                characteristics['species'] = characteristics['organism']
-                    
-                    # Process species separately if it exists
-                    if species_chars:
-                        species_entry = None
-                        if isinstance(species_chars, list) and len(species_chars) > 0:
-                            first_item = species_chars[0]
-                            if isinstance(first_item, dict):
-                                species_entry = first_item
-                            elif isinstance(first_item, str):
-                                species_entry = {'text': first_item, 'ontologyTerms': []}
-                        elif isinstance(species_chars, dict):
-                            species_entry = species_chars
-                        elif isinstance(species_chars, str):
-                            species_entry = {'text': species_chars, 'ontologyTerms': []}
-                        
-                        if species_entry:
-                            ontology_terms = species_entry.get('ontologyTerms', [])
-                            if isinstance(ontology_terms, str):
-                                ontology_terms = [ontology_terms]
-                            
-                            characteristics['species'] = [{
-                                'text': species_entry.get('text', str(species_entry.get('value', ''))),
-                                'ontologyTerms': ontology_terms
-                            }]
-                    
-                    # Ensure species is set if organism exists but species wasn't set separately
-                    if 'organism' in characteristics and 'species' not in characteristics:
-                        characteristics['species'] = characteristics['organism']
-                    
-                    # If we found organism information, return it in expected format
-                    if 'organism' in characteristics:
-                        print(f"    Successfully fetched organism from BioSamples API for '{biosample_id}'")
-                        return {
-                            'characteristics': characteristics
-                        }
-                    else:
-                        print(f"    BioSamples API returned data for '{biosample_id}' but no organism found in characteristics")
-                else:
-                    print(f"    BioSamples API returned data for '{biosample_id}' but no 'characteristics' field found")
-                    
-            elif response.status_code == 404:
-                print(f"    BioSamples ID '{biosample_id}' not found (404)")
-            else:
-                print(f"    BioSamples API request failed with status {response.status_code}")
-                
-        except requests.exceptions.Timeout:
-            print(f"    BioSamples API request timed out for '{biosample_id}'")
-        except requests.exceptions.RequestException as e:
-            print(f"    BioSamples API request error for '{biosample_id}': {str(e)}")
-        except Exception as e:
-            print(f"    Unexpected error fetching from BioSamples API for '{biosample_id}': {str(e)}")
-            import traceback
-            traceback.print_exc()
-        
-        return None
-
-    def _fetch_taxon_information_recursive(
-        self,
-        parent_id: str,
-        results_by_type: Dict[str, Any],
-        organism_samples: Dict[str, Any],
-        biosample_exports: Dict[str, List[Dict]],
-        visited: set = None
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Recursively fetch organism information for a parent ID following the derived_from chain.
-        
-        Strategy:
-        1. Check if parent exists in current submission (all sheets)
-        2. If parent has organism, return it
-        3. If parent doesn't have organism but has derived_from, recursively check parent's parent
-        4. If parent is a BioSamples ID (starts with "SAM"), fetch from BioSamples API
-        5. Continue until organism is found or chain is exhausted
-        
-        Args:
-            parent_id: The ID to look up
-            results_by_type: All validation results organized by sample type
-            organism_samples: Dictionary of organism samples keyed by name
-            biosample_exports: Already exported biosample data
-            visited: Set of visited IDs to prevent cycles
-            
-        Returns:
-            Dict with 'organism' and 'species' characteristics, or None if not found
-        """
-        if visited is None:
-            visited = set()
-        
-        # Prevent infinite loops
-        if parent_id in visited:
-            print(f"    Circular reference detected for '{parent_id}', skipping")
-            return None
-        
-        visited.add(parent_id)
-        
-        # Handle "restricted access" - default to Bos taurus
-        if parent_id == "restricted access":
-            return {
-                'characteristics': {
-                    'organism': [{'text': 'Bos taurus', 'ontologyTerms': ['http://purl.obolibrary.org/obo/NCBITaxon_9913']}],
-                    'species': [{'text': 'Bos taurus', 'ontologyTerms': ['http://purl.obolibrary.org/obo/NCBITaxon_9913']}]
-                }
-            }
-        
-        # Step 1: Check if parent is an organism sample
-        if parent_id in organism_samples:
-            print(f"    Found '{parent_id}' as organism sample")
-            parent_model = organism_samples[parent_id]
-            if hasattr(parent_model, 'organism') and hasattr(parent_model, 'organism_term_source_id'):
-                from app.validation.sample.organism_validator import OrganismValidator
-                org_validator = OrganismValidator()
-                biosample_data = org_validator.export_to_biosample_format(parent_model)
-                if 'organism' in biosample_data.get('characteristics', {}):
-                    return {
-                        'characteristics': {
-                            'organism': biosample_data['characteristics']['organism'],
-                            'species': biosample_data['characteristics'].get('species', biosample_data['characteristics']['organism'])
-                        }
-                    }
-        
-        # Step 2: Check if parent exists in already exported biosample_exports (already processed)
-        for exported_type, exported_samples in biosample_exports.items():
-            for exported in exported_samples:
-                if exported.get('sample_name') == parent_id:
-                    exported_data = exported.get('biosample_format', {})
-                    exported_chars = exported_data.get('characteristics', {})
-                    if 'organism' in exported_chars and 'species' in exported_chars:
-                        print(f"    Found '{parent_id}' in already exported samples (type: {exported_type}) with organism")
-                        return {
-                            'characteristics': {
-                                'organism': exported_chars['organism'],
-                                'species': exported_chars['species']
-                            }
-                        }
-                    # If found but no organism, continue to check derived_from
-        
-        # Step 3: Check all validation results (current submission) for the parent
-        for sample_type_key, type_results in results_by_type.items():
-            # Get the validator for this sample type to use its get_sample_type_name() method
-            parent_validator = self.validators.get(sample_type_key)
-            if not parent_validator:
-                # Try with normalized key (space to underscore)
-                normalized_key = sample_type_key.replace(" ", "_")
-                parent_validator = self.validators.get(normalized_key)
-            
-            if not parent_validator:
-                continue
-            
-            # Use the validator's get_sample_type_name() to get the normalized name used in results keys
-            normalized_sample_type = parent_validator.get_sample_type_name()
-            valid_key = f'valid_{normalized_sample_type}s'
-            if valid_key.endswith("ss") and not normalized_sample_type.endswith("s"):
-                valid_key = valid_key[:-1]
-            
-            if valid_key in type_results:
-                for parent_sample in type_results[valid_key]:
-                    if parent_sample.get('sample_name') == parent_id:
-                        print(f"    Found '{parent_id}' as '{sample_type_key}' in validation results")
-                        
-                        # Export parent's biosample_data to check for organism
-                        parent_model = parent_sample.get('model')
-                        if isinstance(parent_model, dict):
-                            parent_model = _reconstruct_model_from_dict(
-                                parent_validator.get_model_class(), parent_model)
-                        
-                        parent_biosample_data = parent_validator.export_to_biosample_format(parent_model)
-                        parent_chars = parent_biosample_data.get('characteristics', {})
-                        
-                        # If parent has organism, return it
-                        if 'organism' in parent_chars and 'species' in parent_chars:
-                            print(f"    Parent '{parent_id}' has organism in biosample_data")
-                            return {
-                                'characteristics': {
-                                    'organism': parent_chars['organism'],
-                                    'species': parent_chars['species']
-                                }
-                            }
-                        
-                        # If parent doesn't have organism, check its derived_from (recursive)
-                        parent_sample_data = parent_sample.get('data', {})
-                        parent_derived_from = parent_sample_data.get('Derived From') or parent_sample_data.get('derived_from') or []
-                        if not parent_derived_from and hasattr(parent_model, 'derived_from'):
-                            parent_derived_from = getattr(parent_model, 'derived_from', [])
-                        
-                        parent_parent_id = None
-                        if parent_derived_from:
-                            if isinstance(parent_derived_from, list) and len(parent_derived_from) > 0:
-                                first = parent_derived_from[0]
-                                if isinstance(first, dict):
-                                    parent_parent_id = first.get('value') or first.get('text') or first.get('target')
-                                else:
-                                    parent_parent_id = str(first)
-                            elif isinstance(parent_derived_from, str):
-                                parent_parent_id = parent_derived_from
-                        
-                        if parent_parent_id:
-                            print(f"    Parent '{parent_id}' doesn't have organism, checking its parent '{parent_parent_id}'")
-                            # Recursive call to check parent's parent
-                            result = self._fetch_taxon_information_recursive(
-                                parent_parent_id,
-                                results_by_type,
-                                organism_samples,
-                                biosample_exports,
-                                visited
-                            )
-                            if result:
-                                return result
-                        break
-        
-        # Step 4: Check if parent_id is a BioSamples ID (starts with "SAM")
-        if parent_id.startswith("SAM"):
-            print(f"    '{parent_id}' appears to be a BioSamples ID (starts with SAM)")
-            biosample_data = self._fetch_from_biosamples_api(parent_id)
-            if biosample_data and 'organism' in biosample_data.get('characteristics', {}):
-                return {
-                    'characteristics': {
-                        'organism': biosample_data['characteristics']['organism'],
-                        'species': biosample_data['characteristics'].get('species', biosample_data['characteristics']['organism'])
-                    }
-                }
-        
-        print(f"    Could not find organism for '{parent_id}'")
-        return None
 
     def export_valid_samples_to_biosample(self, validation_results: Dict[str, Any]) -> Dict[str, List[Dict]]:
         biosample_exports = {}
@@ -947,35 +580,35 @@ class UnifiedFAANGValidator:
         taxon_ids = {}  # record_name -> organism term
         taxons = {}  # record_name -> organism text
         missing_ids = {}  # record_name -> parent_id (to look up)
-        
+
         # PHASE 1: Initial Collection - iterate through ALL sheets and collect organism info or parent IDs
         print("Phase 1: Collecting organism information and missing IDs...")
         for sample_type in sample_types:
             results = results_by_type.get(sample_type, {}) or {}
-            
+
             # Get validator to use its get_sample_type_name() method to construct the correct key
             validator = self.validators.get(sample_type)
             if not validator:
                 print(f"  Warning: No validator found for sample type '{sample_type}', skipping")
                 continue
-            
+
             # Use the validator's get_sample_type_name() to get the normalized name used in results keys
             normalized_sample_type = validator.get_sample_type_name()
             valid_samples_key = f'valid_{normalized_sample_type}s'
             if valid_samples_key.endswith("ss") and not normalized_sample_type.endswith("s"):
                 valid_samples_key = valid_samples_key[:-1]
-            
+
             if valid_samples_key in results and results[valid_samples_key]:
-                
+
                 for valid_sample in results[valid_samples_key]:
                     record_name = valid_sample.get('sample_name')
                     if not record_name:
                         continue
-                    
+
                     model = valid_sample.get('model')
                     if isinstance(model, dict):
                         model = _reconstruct_model_from_dict(validator.get_model_class(), model)
-                    
+
                     # Check if model has organism field (for organism samples)
                     has_organism_directly = False
                     if hasattr(model, 'organism') and hasattr(model, 'organism_term_source_id'):
@@ -993,12 +626,12 @@ class UnifiedFAANGValidator:
                                         taxon_ids[record_name] = org_item['ontologyTerms'][0]
                                     taxons[record_name] = org_item.get('text', '')
                             has_organism_directly = True
-                    
+
                     # Also check exported biosample_data (some validators might add organism)
                     if not has_organism_directly:
                         biosample_data = validator.export_to_biosample_format(model)
                         characteristics = biosample_data.get('characteristics', {})
-                        
+
                         if 'organism' in characteristics and 'species' in characteristics:
                             # Direct organism information available in exported data
                             org_entry = characteristics['organism']
@@ -1009,7 +642,7 @@ class UnifiedFAANGValidator:
                                         taxon_ids[record_name] = org_item['ontologyTerms'][0]
                                     taxons[record_name] = org_item.get('text', '')
                             has_organism_directly = True
-                    
+
                     if has_organism_directly:
                         print(f"  {record_name}: has organism directly")
                     else:
@@ -1020,12 +653,13 @@ class UnifiedFAANGValidator:
                             derived_from = getattr(model, 'derived_from', [])
                         if not derived_from and isinstance(model, dict):
                             derived_from = model.get('Derived From') or model.get('derived_from') or []
-                        
+
                         if derived_from:
                             # Extract parent ID from derived_from
                             parent_id = None
                             if isinstance(derived_from, dict):
-                                parent_id = derived_from.get('value') or derived_from.get('text') or derived_from.get('target')
+                                parent_id = derived_from.get('value') or derived_from.get('text') or derived_from.get(
+                                    'target')
                             elif isinstance(derived_from, list) and len(derived_from) > 0:
                                 first = derived_from[0]
                                 if isinstance(first, dict):
@@ -1034,14 +668,14 @@ class UnifiedFAANGValidator:
                                     parent_id = str(first)
                             elif isinstance(derived_from, str):
                                 parent_id = derived_from
-                            
+
                             if parent_id:
                                 missing_ids[record_name] = parent_id
                                 print(f"  {record_name}: missing organism, will look up from parent '{parent_id}'")
-        
+
         # PHASE 2: Recursive Lookup - resolve missing_ids by recursively fetching from parents
         print(f"\nPhase 2: Recursively resolving {len(missing_ids)} missing organism IDs...")
-        
+
         def fetch_taxon_information(record_name: str, parent_id: str, visited: set = None) -> bool:
             """
             Recursively fetch organism information for a record by following derived_from chain.
@@ -1049,20 +683,20 @@ class UnifiedFAANGValidator:
             """
             if visited is None:
                 visited = set()
-            
+
             if record_name in visited:
                 print(f"    Circular reference detected for '{record_name}', skipping")
                 return False
-            
+
             visited.add(record_name)
-            
+
             # If parent_id already has organism info, use it
             if parent_id in taxon_ids:
                 taxon_ids[record_name] = taxon_ids[parent_id]
                 taxons[record_name] = taxons[parent_id]
                 print(f"    {record_name}: got organism from cached parent '{parent_id}'")
                 return True
-            
+
             # Look up parent_id using recursive function
             parent_biosample_data = self._fetch_taxon_information_recursive(
                 parent_id,
@@ -1071,7 +705,7 @@ class UnifiedFAANGValidator:
                 biosample_exports,
                 set()  # Use fresh visited set for recursive call
             )
-            
+
             if parent_biosample_data and 'organism' in parent_biosample_data.get('characteristics', {}):
                 org_entry = parent_biosample_data['characteristics']['organism']
                 if isinstance(org_entry, list) and len(org_entry) > 0:
@@ -1081,7 +715,7 @@ class UnifiedFAANGValidator:
                         if 'ontologyTerms' in org_item and len(org_item['ontologyTerms']) > 0:
                             org_term = org_item['ontologyTerms'][0]
                         org_text = org_item.get('text', '')
-                        
+
                         # Cache for both record_name and parent_id (if parent_id also needs it)
                         if org_term:
                             taxon_ids[record_name] = org_term
@@ -1092,30 +726,31 @@ class UnifiedFAANGValidator:
                             taxons[record_name] = org_text
                             if parent_id in missing_ids and parent_id not in taxons:
                                 taxons[parent_id] = org_text
-                        
-                        print(f"    {record_name}: got organism from parent '{parent_id}' (term: {org_term}, text: {org_text})")
+
+                        print(
+                            f"    {record_name}: got organism from parent '{parent_id}' (term: {org_term}, text: {org_text})")
                         return True
-            
+
             print(f"    {record_name}: could not resolve organism from parent '{parent_id}'")
             return False
-        
+
         # Resolve all missing_ids
         for record_name, parent_id in missing_ids.items():
             if record_name not in taxon_ids:  # Only process if not already resolved
                 fetch_taxon_information(record_name, parent_id)
-        
+
         # PHASE 3: Export all samples with organism information added
         print(f"\nPhase 3: Exporting all samples with organism information...")
         for sample_type in sample_types:
             results = results_by_type.get(sample_type, {}) or {}
-            
+
             # Get validator to use its get_sample_type_name() method to construct the correct key
             # This ensures we use the same normalization logic that was used when creating the results
             validator = self.validators.get(sample_type)
             if not validator:
                 print(f"  Warning: No validator found for sample type '{sample_type}', skipping")
                 continue
-            
+
             # Use the validator's get_sample_type_name() to get the normalized name used in results keys
             normalized_sample_type = validator.get_sample_type_name()
             valid_samples_key = f'valid_{normalized_sample_type}s'
@@ -1143,7 +778,8 @@ class UnifiedFAANGValidator:
                             # Build organism entry from resolved taxon info
                             organism_entry = [{
                                 'text': taxons.get(sample_name_export, ''),
-                                'ontologyTerms': [taxon_ids[sample_name_export]] if taxon_ids[sample_name_export] else []
+                                'ontologyTerms': [taxon_ids[sample_name_export]] if taxon_ids[
+                                    sample_name_export] else []
                             }]
                             characteristics['organism'] = organism_entry
                             characteristics['species'] = organism_entry
@@ -1166,7 +802,8 @@ class UnifiedFAANGValidator:
                                     else:
                                         parent_name = str(first)
                                 elif isinstance(derived_from, dict):
-                                    parent_name = derived_from.get('value') or derived_from.get('text') or derived_from.get('target')
+                                    parent_name = derived_from.get('value') or derived_from.get(
+                                        'text') or derived_from.get('target')
                                 elif isinstance(derived_from, str):
                                     parent_name = derived_from
 
@@ -1177,8 +814,9 @@ class UnifiedFAANGValidator:
                                     organism_samples,
                                     biosample_exports
                                 )
-                                
-                                if parent_biosample_data and 'organism' in parent_biosample_data.get('characteristics', {}):
+
+                                if parent_biosample_data and 'organism' in parent_biosample_data.get('characteristics',
+                                                                                                     {}):
                                     characteristics['organism'] = parent_biosample_data['characteristics']['organism']
                                     characteristics['species'] = parent_biosample_data['characteristics']['species']
                                     print(f"  {sample_name_export}: added organism via fallback lookup")
@@ -1206,27 +844,28 @@ class UnifiedFAANGValidator:
             'sample_types': list(self.supported_sample_types),
             'metadata_types': list(self.supported_metadata_types),
             'experiment_types': list(self.supported_experiment_types),
-            'analysis_types': list(self.supported_analysis_types)
+            'analysis_types': list(self.supported_analysis_types),
+            'analysis_metadata_types': list(self.supported_analysis_metadata_types)
         }
 
     def submit_to_biosamples(
-            self,
-            validation_results: Dict[str, Any],
-            webin_username: str,
-            webin_password: str,
-            domain: str,
-            mode: str = 'test',
-            person_data: Optional[Dict[str, Any]] = None,
-            organization_data: Optional[Dict[str, Any]] = None,
-            update_existing: bool = False
+        self,
+        validation_results: Dict[str, Any],
+        webin_username: str,
+        webin_password: str,
+        domain: str,
+        mode: str = 'test',
+        person_data: Optional[Dict[str, Any]] = None,
+        organization_data: Optional[Dict[str, Any]] = None,
+        update_existing: bool = False
     ) -> Dict[str, Any]:
         try:
             # Print validation summary
             total_summary = validation_results.get('total_summary', {}) or {}
             valid_samples = total_summary.get('valid_samples', 0)
             invalid_samples = total_summary.get('invalid_samples', 0)
-            print('***************************************')
-            print(json.dumps(validation_results))
+            print(f"Valid samples: {valid_samples}")
+            print(f"Invalid samples: {invalid_samples}")
 
             biosample_exports = self.export_valid_samples_to_biosample(validation_results)
 

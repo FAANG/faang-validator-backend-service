@@ -69,7 +69,7 @@ class FAANGOrganismSample(SampleCoreMetadata):
         "restricted access",
         ""
     ]] = Field(None, alias="Unit", json_schema_extra={"recommended": True})
-    # Declare term source ID before breed so validators see it in info.data
+
     breed_term_source_id: Optional[Union[str, Literal["not applicable", "restricted access", ""]]] = Field(
         None,
         alias="Breed Term Source ID",

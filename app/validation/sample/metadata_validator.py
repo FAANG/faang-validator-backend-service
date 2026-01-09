@@ -3,6 +3,7 @@ from pydantic import ValidationError, BaseModel
 from app.rulesets_pydantics.sample.submission_ruleset import FAANGSubmission
 from app.rulesets_pydantics.sample.person_ruleset import FAANGPerson
 from app.rulesets_pydantics.sample.organization_ruleset import FAANGOrganization
+from app.rulesets_pydantics.analysis.submission_ruleset import AnalysisSubmission
 
 
 class BaseMetadataValidator:
@@ -94,3 +95,7 @@ class PersonValidator(BaseMetadataValidator):
 class OrganizationValidator(BaseMetadataValidator):
     def __init__(self):
         super().__init__(FAANGOrganization, 'organization', 'Organization', 'organizations')
+
+class AnalysisSubmissionValidator(BaseMetadataValidator):
+    def __init__(self):
+        super().__init__(AnalysisSubmission, 'submission', 'Submission', 'submissions')
