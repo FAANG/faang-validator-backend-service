@@ -612,11 +612,11 @@ class UnifiedFAANGValidator:
 
                         biosample_data = validator.export_to_biosample_format(model)
 
-                        # For specimen, pool, and cell specimen samples, if organism/species are missing, try to get from parent organism
+                        # For specimen, pool, cell specimen, and organoid samples, if organism/species are missing, try to get from parent organism
                         # Check the sample data for derived_from field (not relationships in biosample_data)
                         # Note: sample_type can be 'specimen from organism' (with spaces) or 'specimen_from_organism' (with underscores)
                         normalized_sample_type = sample_type.replace(" ", "_")
-                        if normalized_sample_type in ['specimen_from_organism', 'pool_of_specimens', 'cell_specimen']:
+                        if normalized_sample_type in ['specimen_from_organism', 'pool_of_specimens', 'cell_specimen', 'organoid']:
                             characteristics = biosample_data.get('characteristics', {})
                             if 'organism' not in characteristics or 'species' not in characteristics:
                                 # Try to get from derived_from field in the sample data
@@ -798,6 +798,184 @@ class UnifiedFAANGValidator:
                                             if not found_specimen:
                                                 print(
                                                     f"  Parent specimen '{parent_name}' not found in specimen_results")
+                                    
+                                    elif normalized_sample_type == 'organoid':
+                                        # Organoid can derive from 'specimen from organism' or another 'organoid'
+                                        # Get organism from the parent by finding it in validation results and exporting its biosample_data
+                                        print(f"  Organoid {sample_name_export}: Looking for parent '{parent_name}' in validation results")
+                                        
+                                        found_parent = False
+                                        
+                                        # First, try to find parent as 'specimen from organism'
+                                        specimen_results = results_by_type.get('specimen from organism',
+                                                                               {}) or results_by_type.get(
+                                            'specimen_from_organism', {}) or {}
+                                        specimen_valid_key = 'valid_specimen_from_organisms'
+                                        
+                                        if specimen_valid_key in specimen_results:
+                                            for spec_sample in specimen_results[specimen_valid_key]:
+                                                if spec_sample.get('sample_name') == parent_name:
+                                                    found_parent = True
+                                                    print(f"  Found parent '{parent_name}' as specimen_from_organism")
+                                                    
+                                                    # Export the parent specimen's biosample_data
+                                                    spec_model = spec_sample.get('model')
+                                                    if isinstance(spec_model, dict):
+                                                        spec_validator = self.validators.get('specimen_from_organism')
+                                                        if spec_validator:
+                                                            spec_model = _reconstruct_model_from_dict(
+                                                                spec_validator.get_model_class(), spec_model)
+                                                    
+                                                    spec_validator = self.validators.get('specimen_from_organism')
+                                                    if spec_validator:
+                                                        parent_biosample_data = spec_validator.export_to_biosample_format(spec_model)
+                                                        parent_chars = parent_biosample_data.get('characteristics', {})
+                                                        
+                                                        if 'organism' in parent_chars and 'species' in parent_chars:
+                                                            parent_biosample_data = {
+                                                                'characteristics': {
+                                                                    'organism': parent_chars['organism'],
+                                                                    'species': parent_chars['species']
+                                                                }
+                                                            }
+                                                            print(
+                                                                f"  Got organism data from parent specimen: {parent_biosample_data.get('characteristics', {}).get('organism')}")
+                                                        else:
+                                                            # Specimen might not have organism yet, try to get from its parent organism
+                                                            print(
+                                                                f"  Parent specimen '{parent_name}' doesn't have organism/species, checking its parent organism")
+                                                            spec_data = spec_sample.get('data', {})
+                                                            spec_derived_from = spec_data.get('Derived From') or spec_data.get('derived_from') or []
+                                                            if not spec_derived_from and hasattr(spec_model, 'derived_from'):
+                                                                spec_derived_from = getattr(spec_model, 'derived_from', [])
+                                                            
+                                                            spec_parent_name = None
+                                                            if spec_derived_from:
+                                                                if isinstance(spec_derived_from, list) and len(spec_derived_from) > 0:
+                                                                    first = spec_derived_from[0]
+                                                                    if isinstance(first, dict):
+                                                                        spec_parent_name = first.get('value') or first.get('text') or first.get('target')
+                                                                    else:
+                                                                        spec_parent_name = str(first)
+                                                                elif isinstance(spec_derived_from, str):
+                                                                    spec_parent_name = spec_derived_from
+                                                            
+                                                            # Get organism from specimen's parent organism
+                                                            if spec_parent_name and spec_parent_name in organism_samples:
+                                                                print(f"  Found parent organism: {spec_parent_name}")
+                                                                parent_org_model = organism_samples[spec_parent_name]
+                                                                if hasattr(parent_org_model, 'organism') and hasattr(parent_org_model, 'organism_term_source_id'):
+                                                                    from app.validation.sample.organism_validator import OrganismValidator
+                                                                    org_validator = OrganismValidator()
+                                                                    parent_biosample_data = org_validator.export_to_biosample_format(parent_org_model)
+                                                                    print(
+                                                                        f"  Got organism data from parent organism: {parent_biosample_data.get('characteristics', {}).get('organism')}")
+                                                                else:
+                                                                    parent_biosample_data = None
+                                                            else:
+                                                                print(
+                                                                    f"  Parent organism '{spec_parent_name}' not found in organism_samples")
+                                                                parent_biosample_data = None
+                                                    break
+                                        
+                                        # If not found as specimen, try to find as organoid
+                                        if not found_parent:
+                                            organoid_results = results_by_type.get('organoid', {}) or {}
+                                            organoid_valid_key = 'valid_organoids'
+                                            
+                                            if organoid_valid_key in organoid_results:
+                                                for org_sample in organoid_results[organoid_valid_key]:
+                                                    if org_sample.get('sample_name') == parent_name:
+                                                        found_parent = True
+                                                        print(f"  Found parent '{parent_name}' as organoid")
+                                                        
+                                                        # Export the parent organoid's biosample_data
+                                                        parent_org_model = org_sample.get('model')
+                                                        if isinstance(parent_org_model, dict):
+                                                            org_validator = self.validators.get('organoid')
+                                                            if org_validator:
+                                                                parent_org_model = _reconstruct_model_from_dict(
+                                                                    org_validator.get_model_class(), parent_org_model)
+                                                        
+                                                        org_validator = self.validators.get('organoid')
+                                                        if org_validator:
+                                                            parent_biosample_data = org_validator.export_to_biosample_format(parent_org_model)
+                                                            parent_chars = parent_biosample_data.get('characteristics', {})
+                                                            
+                                                            if 'organism' in parent_chars and 'species' in parent_chars:
+                                                                parent_biosample_data = {
+                                                                    'characteristics': {
+                                                                        'organism': parent_chars['organism'],
+                                                                        'species': parent_chars['species']
+                                                                    }
+                                                                }
+                                                                print(
+                                                                    f"  Got organism data from parent organoid: {parent_biosample_data.get('characteristics', {}).get('organism')}")
+                                                            else:
+                                                                # Parent organoid doesn't have organism, try to get from its parent (recursive)
+                                                                print(
+                                                                    f"  Parent organoid '{parent_name}' doesn't have organism/species, checking its parent")
+                                                                parent_org_data = org_sample.get('data', {})
+                                                                parent_org_derived_from = parent_org_data.get('Derived From') or parent_org_data.get('derived_from') or []
+                                                                if not parent_org_derived_from and hasattr(parent_org_model, 'derived_from'):
+                                                                    parent_org_derived_from = getattr(parent_org_model, 'derived_from', [])
+                                                                
+                                                                parent_parent_name = None
+                                                                if parent_org_derived_from:
+                                                                    if isinstance(parent_org_derived_from, list) and len(parent_org_derived_from) > 0:
+                                                                        first = parent_org_derived_from[0]
+                                                                        if isinstance(first, dict):
+                                                                            parent_parent_name = first.get('value') or first.get('text') or first.get('target')
+                                                                        else:
+                                                                            parent_parent_name = str(first)
+                                                                    elif isinstance(parent_org_derived_from, str):
+                                                                        parent_parent_name = parent_org_derived_from
+                                                                
+                                                                # Try to find parent organoid's parent as specimen
+                                                                if parent_parent_name and specimen_valid_key in specimen_results:
+                                                                    for spec_sample in specimen_results[specimen_valid_key]:
+                                                                        if spec_sample.get('sample_name') == parent_parent_name:
+                                                                            spec_model = spec_sample.get('model')
+                                                                            if isinstance(spec_model, dict):
+                                                                                spec_validator = self.validators.get('specimen_from_organism')
+                                                                                if spec_validator:
+                                                                                    spec_model = _reconstruct_model_from_dict(
+                                                                                        spec_validator.get_model_class(), spec_model)
+                                                                            
+                                                                            spec_data = spec_sample.get('data', {})
+                                                                            spec_derived_from = spec_data.get('Derived From') or spec_data.get('derived_from') or []
+                                                                            if not spec_derived_from and hasattr(spec_model, 'derived_from'):
+                                                                                spec_derived_from = getattr(spec_model, 'derived_from', [])
+                                                                            
+                                                                            spec_parent_name = None
+                                                                            if spec_derived_from:
+                                                                                if isinstance(spec_derived_from, list) and len(spec_derived_from) > 0:
+                                                                                    first = spec_derived_from[0]
+                                                                                    if isinstance(first, dict):
+                                                                                        spec_parent_name = first.get('value') or first.get('text') or first.get('target')
+                                                                                    else:
+                                                                                        spec_parent_name = str(first)
+                                                                                elif isinstance(spec_derived_from, str):
+                                                                                    spec_parent_name = spec_derived_from
+                                                                            
+                                                                            if spec_parent_name and spec_parent_name in organism_samples:
+                                                                                print(f"  Found grandparent organism: {spec_parent_name}")
+                                                                                parent_org_model = organism_samples[spec_parent_name]
+                                                                                if hasattr(parent_org_model, 'organism') and hasattr(parent_org_model, 'organism_term_source_id'):
+                                                                                    from app.validation.sample.organism_validator import OrganismValidator
+                                                                                    org_validator = OrganismValidator()
+                                                                                    parent_biosample_data = org_validator.export_to_biosample_format(parent_org_model)
+                                                                                    print(
+                                                                                        f"  Got organism data from grandparent organism: {parent_biosample_data.get('characteristics', {}).get('organism')}")
+                                                                                    break
+                                                                        # Could also check if parent_parent_name is another organoid, but keep it simple for now
+                                                                else:
+                                                                    parent_biosample_data = None
+                                                        break
+                                        
+                                        if not found_parent:
+                                            print(
+                                                f"  Parent '{parent_name}' not found in validation results (checked specimen_from_organism and organoid)")
 
                                     # Add organism and species if found
                                     if parent_biosample_data and 'organism' in parent_biosample_data.get(
