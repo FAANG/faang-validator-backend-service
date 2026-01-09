@@ -584,7 +584,7 @@ class UnifiedFAANGValidator:
         # PHASE 1: Initial Collection - iterate through ALL sheets and collect organism info or parent IDs
         print("Phase 1: Collecting organism information and missing IDs...")
         for sample_type in sample_types:
-            results = results_by_type.get(sample_type, {}) or {}
+            results = sample_results.get(sample_type, {}) or {}
 
             # Get validator to use its get_sample_type_name() method to construct the correct key
             validator = self.validators.get(sample_type)
@@ -742,7 +742,7 @@ class UnifiedFAANGValidator:
         # PHASE 3: Export all samples with organism information added
         print(f"\nPhase 3: Exporting all samples with organism information...")
         for sample_type in sample_types:
-            results = results_by_type.get(sample_type, {}) or {}
+            results = sample_results.get(sample_type, {}) or {}
 
             # Get validator to use its get_sample_type_name() method to construct the correct key
             # This ensures we use the same normalization logic that was used when creating the results
