@@ -1,7 +1,9 @@
+import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional, get_args, get_origin, Union
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
+import requests
 
 from app.profiler import cprofiled
 from app.validation.sample.teleostei_embryo_validator import TeleosteiEmbryoValidator
@@ -607,340 +609,589 @@ class UnifiedFAANGValidator:
 
         return "\n".join(report_lines)
 
+    def _fetch_from_biosamples_api(self, biosample_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch biosample data from the public BioSamples API.
+        
+        Args:
+            biosample_id: BioSamples accession ID (e.g., "SAMEA123456" or "SAMN123456")
+            
+        Returns:
+            Dict containing biosample data with characteristics, or None if fetch fails
+        """
+        try:
+            # BioSamples public API endpoint
+            # For public samples: https://www.ebi.ac.uk/biosamples/samples/{accession}
+            api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
+            
+            print(f"    Fetching from BioSamples API: {api_url}")
+            response = requests.get(api_url, timeout=10)
+            
+            if response.status_code == 200:
+                biosample_json = response.json()
+                
+                # Extract characteristics from BioSamples JSON format
+                # BioSamples API returns data in a specific structure
+                characteristics = {}
+                
+                # The structure can vary, but typically characteristics are in 'characteristics' field
+                # BioSamples API can return characteristics as a dict or list of dicts
+                api_characteristics = biosample_json.get('characteristics', {})
+                
+                # Handle case where characteristics might be a list
+                if isinstance(api_characteristics, list):
+                    # Convert list format to dict format for easier processing
+                    characteristics_dict = {}
+                    for char_item in api_characteristics:
+                        if isinstance(char_item, dict) and 'type' in char_item and 'value' in char_item:
+                            char_type = char_item['type']
+                            characteristics_dict[char_type] = char_item.get('values', [char_item['value']])
+                    api_characteristics = characteristics_dict
+                
+                if api_characteristics:
+                    # Extract organism and species
+                    organism_chars = None
+                    species_chars = None
+                    
+                    # BioSamples uses different field names, check common variations
+                    for char_name, char_values in api_characteristics.items():
+                        char_name_lower = char_name.lower().strip()
+                        # Check for organism variations
+                        if char_name_lower in ['organism', 'organism name', 'organism_name', 'organismname']:
+                            organism_chars = char_values
+                        # Check for species variations
+                        elif char_name_lower in ['species', 'organism species', 'organism_species', 'organismspecies']:
+                            species_chars = char_values
+                    
+                    # Format organism information
+                    if organism_chars:
+                        # BioSamples format can be:
+                        # - List: [{"text": "...", "ontologyTerms": ["..."]}, ...]
+                        # - Dict: {"text": "...", "ontologyTerms": [...]}
+                        # - List of strings: ["Bos taurus"]
+                        # - Single string: "Bos taurus"
+                        
+                        organism_entry = None
+                        if isinstance(organism_chars, list) and len(organism_chars) > 0:
+                            first_item = organism_chars[0]
+                            if isinstance(first_item, dict):
+                                organism_entry = first_item
+                            elif isinstance(first_item, str):
+                                # Simple string value, try to find ontology terms elsewhere or use as-is
+                                organism_entry = {'text': first_item, 'ontologyTerms': []}
+                        elif isinstance(organism_chars, dict):
+                            organism_entry = organism_chars
+                        elif isinstance(organism_chars, str):
+                            organism_entry = {'text': organism_chars, 'ontologyTerms': []}
+                        
+                        if organism_entry:
+                            # Ensure ontologyTerms is a list
+                            ontology_terms = organism_entry.get('ontologyTerms', [])
+                            if isinstance(ontology_terms, str):
+                                ontology_terms = [ontology_terms]
+                            
+                            characteristics['organism'] = [{
+                                'text': organism_entry.get('text', str(organism_entry.get('value', ''))),
+                                'ontologyTerms': ontology_terms
+                            }]
+                            # If species not found separately, use organism as species (will be overridden if species_chars exists)
+                            if not species_chars:
+                                characteristics['species'] = characteristics['organism']
+                    
+                    # Process species separately if it exists
+                    if species_chars:
+                        species_entry = None
+                        if isinstance(species_chars, list) and len(species_chars) > 0:
+                            first_item = species_chars[0]
+                            if isinstance(first_item, dict):
+                                species_entry = first_item
+                            elif isinstance(first_item, str):
+                                species_entry = {'text': first_item, 'ontologyTerms': []}
+                        elif isinstance(species_chars, dict):
+                            species_entry = species_chars
+                        elif isinstance(species_chars, str):
+                            species_entry = {'text': species_chars, 'ontologyTerms': []}
+                        
+                        if species_entry:
+                            ontology_terms = species_entry.get('ontologyTerms', [])
+                            if isinstance(ontology_terms, str):
+                                ontology_terms = [ontology_terms]
+                            
+                            characteristics['species'] = [{
+                                'text': species_entry.get('text', str(species_entry.get('value', ''))),
+                                'ontologyTerms': ontology_terms
+                            }]
+                    
+                    # Ensure species is set if organism exists but species wasn't set separately
+                    if 'organism' in characteristics and 'species' not in characteristics:
+                        characteristics['species'] = characteristics['organism']
+                    
+                    # If we found organism information, return it in expected format
+                    if 'organism' in characteristics:
+                        print(f"    Successfully fetched organism from BioSamples API for '{biosample_id}'")
+                        return {
+                            'characteristics': characteristics
+                        }
+                    else:
+                        print(f"    BioSamples API returned data for '{biosample_id}' but no organism found in characteristics")
+                else:
+                    print(f"    BioSamples API returned data for '{biosample_id}' but no 'characteristics' field found")
+                    
+            elif response.status_code == 404:
+                print(f"    BioSamples ID '{biosample_id}' not found (404)")
+            else:
+                print(f"    BioSamples API request failed with status {response.status_code}")
+                
+        except requests.exceptions.Timeout:
+            print(f"    BioSamples API request timed out for '{biosample_id}'")
+        except requests.exceptions.RequestException as e:
+            print(f"    BioSamples API request error for '{biosample_id}': {str(e)}")
+        except Exception as e:
+            print(f"    Unexpected error fetching from BioSamples API for '{biosample_id}': {str(e)}")
+            import traceback
+            traceback.print_exc()
+        
+        return None
+
+    def _fetch_taxon_information_recursive(
+        self,
+        parent_id: str,
+        results_by_type: Dict[str, Any],
+        organism_samples: Dict[str, Any],
+        biosample_exports: Dict[str, List[Dict]],
+        visited: set = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Recursively fetch organism information for a parent ID following the derived_from chain.
+        
+        Strategy:
+        1. Check if parent exists in current submission (all sheets)
+        2. If parent has organism, return it
+        3. If parent doesn't have organism but has derived_from, recursively check parent's parent
+        4. If parent is a BioSamples ID (starts with "SAM"), fetch from BioSamples API
+        5. Continue until organism is found or chain is exhausted
+        
+        Args:
+            parent_id: The ID to look up
+            results_by_type: All validation results organized by sample type
+            organism_samples: Dictionary of organism samples keyed by name
+            biosample_exports: Already exported biosample data
+            visited: Set of visited IDs to prevent cycles
+            
+        Returns:
+            Dict with 'organism' and 'species' characteristics, or None if not found
+        """
+        if visited is None:
+            visited = set()
+        
+        # Prevent infinite loops
+        if parent_id in visited:
+            print(f"    Circular reference detected for '{parent_id}', skipping")
+            return None
+        
+        visited.add(parent_id)
+        
+        # Handle "restricted access" - default to Bos taurus
+        if parent_id == "restricted access":
+            return {
+                'characteristics': {
+                    'organism': [{'text': 'Bos taurus', 'ontologyTerms': ['http://purl.obolibrary.org/obo/NCBITaxon_9913']}],
+                    'species': [{'text': 'Bos taurus', 'ontologyTerms': ['http://purl.obolibrary.org/obo/NCBITaxon_9913']}]
+                }
+            }
+        
+        # Step 1: Check if parent is an organism sample
+        if parent_id in organism_samples:
+            print(f"    Found '{parent_id}' as organism sample")
+            parent_model = organism_samples[parent_id]
+            if hasattr(parent_model, 'organism') and hasattr(parent_model, 'organism_term_source_id'):
+                from app.validation.sample.organism_validator import OrganismValidator
+                org_validator = OrganismValidator()
+                biosample_data = org_validator.export_to_biosample_format(parent_model)
+                if 'organism' in biosample_data.get('characteristics', {}):
+                    return {
+                        'characteristics': {
+                            'organism': biosample_data['characteristics']['organism'],
+                            'species': biosample_data['characteristics'].get('species', biosample_data['characteristics']['organism'])
+                        }
+                    }
+        
+        # Step 2: Check if parent exists in already exported biosample_exports (already processed)
+        for exported_type, exported_samples in biosample_exports.items():
+            for exported in exported_samples:
+                if exported.get('sample_name') == parent_id:
+                    exported_data = exported.get('biosample_format', {})
+                    exported_chars = exported_data.get('characteristics', {})
+                    if 'organism' in exported_chars and 'species' in exported_chars:
+                        print(f"    Found '{parent_id}' in already exported samples (type: {exported_type}) with organism")
+                        return {
+                            'characteristics': {
+                                'organism': exported_chars['organism'],
+                                'species': exported_chars['species']
+                            }
+                        }
+                    # If found but no organism, continue to check derived_from
+        
+        # Step 3: Check all validation results (current submission) for the parent
+        for sample_type_key, type_results in results_by_type.items():
+            # Get the validator for this sample type to use its get_sample_type_name() method
+            parent_validator = self.validators.get(sample_type_key)
+            if not parent_validator:
+                # Try with normalized key (space to underscore)
+                normalized_key = sample_type_key.replace(" ", "_")
+                parent_validator = self.validators.get(normalized_key)
+            
+            if not parent_validator:
+                continue
+            
+            # Use the validator's get_sample_type_name() to get the normalized name used in results keys
+            normalized_sample_type = parent_validator.get_sample_type_name()
+            valid_key = f'valid_{normalized_sample_type}s'
+            if valid_key.endswith("ss") and not normalized_sample_type.endswith("s"):
+                valid_key = valid_key[:-1]
+            
+            if valid_key in type_results:
+                for parent_sample in type_results[valid_key]:
+                    if parent_sample.get('sample_name') == parent_id:
+                        print(f"    Found '{parent_id}' as '{sample_type_key}' in validation results")
+                        
+                        # Export parent's biosample_data to check for organism
+                        parent_model = parent_sample.get('model')
+                        if isinstance(parent_model, dict):
+                            parent_model = _reconstruct_model_from_dict(
+                                parent_validator.get_model_class(), parent_model)
+                        
+                        parent_biosample_data = parent_validator.export_to_biosample_format(parent_model)
+                        parent_chars = parent_biosample_data.get('characteristics', {})
+                        
+                        # If parent has organism, return it
+                        if 'organism' in parent_chars and 'species' in parent_chars:
+                            print(f"    Parent '{parent_id}' has organism in biosample_data")
+                            return {
+                                'characteristics': {
+                                    'organism': parent_chars['organism'],
+                                    'species': parent_chars['species']
+                                }
+                            }
+                        
+                        # If parent doesn't have organism, check its derived_from (recursive)
+                        parent_sample_data = parent_sample.get('data', {})
+                        parent_derived_from = parent_sample_data.get('Derived From') or parent_sample_data.get('derived_from') or []
+                        if not parent_derived_from and hasattr(parent_model, 'derived_from'):
+                            parent_derived_from = getattr(parent_model, 'derived_from', [])
+                        
+                        parent_parent_id = None
+                        if parent_derived_from:
+                            if isinstance(parent_derived_from, list) and len(parent_derived_from) > 0:
+                                first = parent_derived_from[0]
+                                if isinstance(first, dict):
+                                    parent_parent_id = first.get('value') or first.get('text') or first.get('target')
+                                else:
+                                    parent_parent_id = str(first)
+                            elif isinstance(parent_derived_from, str):
+                                parent_parent_id = parent_derived_from
+                        
+                        if parent_parent_id:
+                            print(f"    Parent '{parent_id}' doesn't have organism, checking its parent '{parent_parent_id}'")
+                            # Recursive call to check parent's parent
+                            result = self._fetch_taxon_information_recursive(
+                                parent_parent_id,
+                                results_by_type,
+                                organism_samples,
+                                biosample_exports,
+                                visited
+                            )
+                            if result:
+                                return result
+                        break
+        
+        # Step 4: Check if parent_id is a BioSamples ID (starts with "SAM")
+        if parent_id.startswith("SAM"):
+            print(f"    '{parent_id}' appears to be a BioSamples ID (starts with SAM)")
+            biosample_data = self._fetch_from_biosamples_api(parent_id)
+            if biosample_data and 'organism' in biosample_data.get('characteristics', {}):
+                return {
+                    'characteristics': {
+                        'organism': biosample_data['characteristics']['organism'],
+                        'species': biosample_data['characteristics'].get('species', biosample_data['characteristics']['organism'])
+                    }
+                }
+        
+        print(f"    Could not find organism for '{parent_id}'")
+        return None
+
     def export_valid_samples_to_biosample(self, validation_results: Dict[str, Any]) -> Dict[str, List[Dict]]:
         biosample_exports = {}
 
         sample_types = validation_results.get('sample_types_processed', []) or []
         results_by_type = validation_results.get('results_by_type', {}) or {}
 
+        # Get organism samples for reference
+        organism_samples = {}
+        if 'organism' in results_by_type:
+            org_results = results_by_type.get('organism', {}) or {}
+            org_valid_key = 'valid_organisms'
+            if org_valid_key in org_results:
+                for org_sample in org_results[org_valid_key]:
+                    org_name = org_sample.get('sample_name')
+                    org_model = org_sample.get('model')
+                    if org_name and org_model:
+                        if isinstance(org_model, dict):
+                            org_validator = self.validators.get('organism')
+                            if org_validator:
+                                org_model = _reconstruct_model_from_dict(org_validator.get_model_class(),
+                                                                         org_model)
+                        organism_samples[org_name] = org_model
+
+        # Build lookup tables: taxon_ids (samples with organism), missing_ids (samples needing lookup)
+        taxon_ids = {}  # record_name -> organism term
+        taxons = {}  # record_name -> organism text
+        missing_ids = {}  # record_name -> parent_id (to look up)
+        
+        # PHASE 1: Initial Collection - iterate through ALL sheets and collect organism info or parent IDs
+        print("Phase 1: Collecting organism information and missing IDs...")
         for sample_type in sample_types:
             results = results_by_type.get(sample_type, {}) or {}
-
-            st_key = sample_type.replace(" ", "_")
-            valid_samples_key = f'valid_{st_key}s'
-            # Handle double 's' at the end (e.g., 'pool_of_specimens' -> 'valid_pool_of_specimenss')
-            # If st_key ends with 's', the key will have double 's', which is correct
-            # Only remove one 's' if st_key doesn't end with 's'
-            if valid_samples_key.endswith("ss") and not st_key.endswith("s"):
+            
+            # Get validator to use its get_sample_type_name() method to construct the correct key
+            validator = self.validators.get(sample_type)
+            if not validator:
+                print(f"  Warning: No validator found for sample type '{sample_type}', skipping")
+                continue
+            
+            # Use the validator's get_sample_type_name() to get the normalized name used in results keys
+            normalized_sample_type = validator.get_sample_type_name()
+            valid_samples_key = f'valid_{normalized_sample_type}s'
+            if valid_samples_key.endswith("ss") and not normalized_sample_type.endswith("s"):
                 valid_samples_key = valid_samples_key[:-1]
-
-            print(f"Checking sample_type='{sample_type}', st_key='{st_key}', valid_samples_key='{valid_samples_key}'")
-            print(f"  Available keys in results: {list(results.keys())}")
-            print(f"  Has valid_samples_key: {valid_samples_key in results}")
-            if valid_samples_key in results:
-                print(
-                    f"  Count in {valid_samples_key}: {len(results[valid_samples_key]) if results[valid_samples_key] else 0}")
+            
+            if valid_samples_key in results and results[valid_samples_key]:
+                
+                for valid_sample in results[valid_samples_key]:
+                    record_name = valid_sample.get('sample_name')
+                    if not record_name:
+                        continue
+                    
+                    model = valid_sample.get('model')
+                    if isinstance(model, dict):
+                        model = _reconstruct_model_from_dict(validator.get_model_class(), model)
+                    
+                    # Check if model has organism field (for organism samples)
+                    has_organism_directly = False
+                    if hasattr(model, 'organism') and hasattr(model, 'organism_term_source_id'):
+                        # This is an organism sample - extract organism info
+                        from app.validation.sample.organism_validator import OrganismValidator
+                        org_validator = OrganismValidator()
+                        org_biosample_data = org_validator.export_to_biosample_format(model)
+                        org_chars = org_biosample_data.get('characteristics', {})
+                        if 'organism' in org_chars:
+                            org_entry = org_chars['organism']
+                            if isinstance(org_entry, list) and len(org_entry) > 0:
+                                org_item = org_entry[0]
+                                if isinstance(org_item, dict):
+                                    if 'ontologyTerms' in org_item and len(org_item['ontologyTerms']) > 0:
+                                        taxon_ids[record_name] = org_item['ontologyTerms'][0]
+                                    taxons[record_name] = org_item.get('text', '')
+                            has_organism_directly = True
+                    
+                    # Also check exported biosample_data (some validators might add organism)
+                    if not has_organism_directly:
+                        biosample_data = validator.export_to_biosample_format(model)
+                        characteristics = biosample_data.get('characteristics', {})
+                        
+                        if 'organism' in characteristics and 'species' in characteristics:
+                            # Direct organism information available in exported data
+                            org_entry = characteristics['organism']
+                            if isinstance(org_entry, list) and len(org_entry) > 0:
+                                org_item = org_entry[0]
+                                if isinstance(org_item, dict):
+                                    if 'ontologyTerms' in org_item and len(org_item['ontologyTerms']) > 0:
+                                        taxon_ids[record_name] = org_item['ontologyTerms'][0]
+                                    taxons[record_name] = org_item.get('text', '')
+                            has_organism_directly = True
+                    
+                    if has_organism_directly:
+                        print(f"  {record_name}: has organism directly")
+                    else:
+                        # No organism, check if has derived_from
+                        sample_data = valid_sample.get('data', {})
+                        derived_from = sample_data.get('Derived From') or sample_data.get('derived_from') or []
+                        if not derived_from and hasattr(model, 'derived_from'):
+                            derived_from = getattr(model, 'derived_from', [])
+                        if not derived_from and isinstance(model, dict):
+                            derived_from = model.get('Derived From') or model.get('derived_from') or []
+                        
+                        if derived_from:
+                            # Extract parent ID from derived_from
+                            parent_id = None
+                            if isinstance(derived_from, dict):
+                                parent_id = derived_from.get('value') or derived_from.get('text') or derived_from.get('target')
+                            elif isinstance(derived_from, list) and len(derived_from) > 0:
+                                first = derived_from[0]
+                                if isinstance(first, dict):
+                                    parent_id = first.get('value') or first.get('text') or first.get('target')
+                                else:
+                                    parent_id = str(first)
+                            elif isinstance(derived_from, str):
+                                parent_id = derived_from
+                            
+                            if parent_id:
+                                missing_ids[record_name] = parent_id
+                                print(f"  {record_name}: missing organism, will look up from parent '{parent_id}'")
+        
+        # PHASE 2: Recursive Lookup - resolve missing_ids by recursively fetching from parents
+        print(f"\nPhase 2: Recursively resolving {len(missing_ids)} missing organism IDs...")
+        
+        def fetch_taxon_information(record_name: str, parent_id: str, visited: set = None) -> bool:
+            """
+            Recursively fetch organism information for a record by following derived_from chain.
+            Returns True if organism was found and added to taxon_ids/taxons.
+            """
+            if visited is None:
+                visited = set()
+            
+            if record_name in visited:
+                print(f"    Circular reference detected for '{record_name}', skipping")
+                return False
+            
+            visited.add(record_name)
+            
+            # If parent_id already has organism info, use it
+            if parent_id in taxon_ids:
+                taxon_ids[record_name] = taxon_ids[parent_id]
+                taxons[record_name] = taxons[parent_id]
+                print(f"    {record_name}: got organism from cached parent '{parent_id}'")
+                return True
+            
+            # Look up parent_id using recursive function
+            parent_biosample_data = self._fetch_taxon_information_recursive(
+                parent_id,
+                results_by_type,
+                organism_samples,
+                biosample_exports,
+                set()  # Use fresh visited set for recursive call
+            )
+            
+            if parent_biosample_data and 'organism' in parent_biosample_data.get('characteristics', {}):
+                org_entry = parent_biosample_data['characteristics']['organism']
+                if isinstance(org_entry, list) and len(org_entry) > 0:
+                    org_item = org_entry[0]
+                    if isinstance(org_item, dict):
+                        org_term = None
+                        if 'ontologyTerms' in org_item and len(org_item['ontologyTerms']) > 0:
+                            org_term = org_item['ontologyTerms'][0]
+                        org_text = org_item.get('text', '')
+                        
+                        # Cache for both record_name and parent_id (if parent_id also needs it)
+                        if org_term:
+                            taxon_ids[record_name] = org_term
+                            # Also cache for parent_id if it's in missing_ids (for future lookups)
+                            if parent_id in missing_ids and parent_id not in taxon_ids:
+                                taxon_ids[parent_id] = org_term
+                        if org_text:
+                            taxons[record_name] = org_text
+                            if parent_id in missing_ids and parent_id not in taxons:
+                                taxons[parent_id] = org_text
+                        
+                        print(f"    {record_name}: got organism from parent '{parent_id}' (term: {org_term}, text: {org_text})")
+                        return True
+            
+            print(f"    {record_name}: could not resolve organism from parent '{parent_id}'")
+            return False
+        
+        # Resolve all missing_ids
+        for record_name, parent_id in missing_ids.items():
+            if record_name not in taxon_ids:  # Only process if not already resolved
+                fetch_taxon_information(record_name, parent_id)
+        
+        # PHASE 3: Export all samples with organism information added
+        print(f"\nPhase 3: Exporting all samples with organism information...")
+        for sample_type in sample_types:
+            results = results_by_type.get(sample_type, {}) or {}
+            
+            # Get validator to use its get_sample_type_name() method to construct the correct key
+            # This ensures we use the same normalization logic that was used when creating the results
+            validator = self.validators.get(sample_type)
+            if not validator:
+                print(f"  Warning: No validator found for sample type '{sample_type}', skipping")
+                continue
+            
+            # Use the validator's get_sample_type_name() to get the normalized name used in results keys
+            normalized_sample_type = validator.get_sample_type_name()
+            valid_samples_key = f'valid_{normalized_sample_type}s'
+            if valid_samples_key.endswith("ss") and not normalized_sample_type.endswith("s"):
+                valid_samples_key = valid_samples_key[:-1]
 
             if valid_samples_key in results and results[valid_samples_key]:
                 count = len(results[valid_samples_key])
                 print(f"Type '{sample_type}': {count} valid samples found")
-                validator = self.validators[sample_type]
                 biosample_exports[sample_type] = []
-
-                print(f"Processing {len(results[valid_samples_key])} samples of type '{sample_type}'")
-
-                # Get organism samples for reference (needed for specimen samples)
-                organism_samples = {}
-                if 'organism' in results_by_type:
-                    org_results = results_by_type.get('organism', {}) or {}
-                    org_valid_key = 'valid_organisms'
-                    if org_valid_key in org_results:
-                        for org_sample in org_results[org_valid_key]:
-                            org_name = org_sample.get('sample_name')
-                            org_model = org_sample.get('model')
-                            if org_name and org_model:
-                                if isinstance(org_model, dict):
-                                    org_validator = self.validators.get('organism')
-                                    if org_validator:
-                                        org_model = _reconstruct_model_from_dict(org_validator.get_model_class(),
-                                                                                 org_model)
-                                organism_samples[org_name] = org_model
 
                 for idx, valid_sample in enumerate(results[valid_samples_key]):
                     sample_name_export = valid_sample.get('sample_name')
                     try:
                         model = valid_sample.get('model')
 
-                        # If model is a dict (serialized), convert it back to model instance
-                        # Use recursive reconstruction to handle nested models (CellType, HealthStatus, etc.)
                         if isinstance(model, dict):
-                            model_class = validator.get_model_class()
-                            # Reconstruct model with nested models without re-validation
-                            model = _reconstruct_model_from_dict(model_class, model)
+                            model = _reconstruct_model_from_dict(validator.get_model_class(), model)
 
                         biosample_data = validator.export_to_biosample_format(model)
+                        characteristics = biosample_data.get('characteristics', {})
 
-                        # For specimen, pool, cell specimen, and organoid samples, if organism/species are missing, try to get from parent organism
-                        # Check the sample data for derived_from field (not relationships in biosample_data)
-                        # Note: sample_type can be 'specimen from organism' (with spaces) or 'specimen_from_organism' (with underscores)
-                        normalized_sample_type = sample_type.replace(" ", "_")
-                        if normalized_sample_type in ['specimen_from_organism', 'pool_of_specimens', 'cell_specimen', 'organoid']:
-                            characteristics = biosample_data.get('characteristics', {})
-                            if 'organism' not in characteristics or 'species' not in characteristics:
-                                # Try to get from derived_from field in the sample data
-                                sample_data = valid_sample.get('data', {})
-                                derived_from = sample_data.get('Derived From') or sample_data.get('derived_from') or []
+                        # Add organism if we resolved it in Phase 2
+                        if sample_name_export in taxon_ids:
+                            # Build organism entry from resolved taxon info
+                            organism_entry = [{
+                                'text': taxons.get(sample_name_export, ''),
+                                'ontologyTerms': [taxon_ids[sample_name_export]] if taxon_ids[sample_name_export] else []
+                            }]
+                            characteristics['organism'] = organism_entry
+                            characteristics['species'] = organism_entry
+                            print(f"  {sample_name_export}: added resolved organism")
+                        elif 'organism' not in characteristics or 'species' not in characteristics:
+                            # Final attempt: try recursive lookup as fallback
+                            sample_data = valid_sample.get('data', {})
+                            derived_from = sample_data.get('Derived From') or sample_data.get('derived_from') or []
+                            if not derived_from and hasattr(model, 'derived_from'):
+                                derived_from = getattr(model, 'derived_from', [])
+                            if not derived_from and isinstance(model, dict):
+                                derived_from = model.get('Derived From') or model.get('derived_from') or []
 
-                                if not derived_from and hasattr(model, 'derived_from'):
-                                    derived_from = getattr(model, 'derived_from', [])
+                            parent_name = None
+                            if derived_from:
+                                if isinstance(derived_from, list) and len(derived_from) > 0:
+                                    first = derived_from[0]
+                                    if isinstance(first, dict):
+                                        parent_name = first.get('value') or first.get('text') or first.get('target')
+                                    else:
+                                        parent_name = str(first)
+                                elif isinstance(derived_from, dict):
+                                    parent_name = derived_from.get('value') or derived_from.get('text') or derived_from.get('target')
+                                elif isinstance(derived_from, str):
+                                    parent_name = derived_from
 
-                                # Also check if model is a dict and has the field
-                                if not derived_from and isinstance(model, dict):
-                                    derived_from = model.get('Derived From') or model.get('derived_from') or []
-
-                                # Get parent name from derived_from
-                                # For pool_of_specimens: derived_from is a list of specimen names
-                                # For specimen_from_organism: derived_from is a list with one organism name
-                                parent_name = None
-                                if derived_from:
-                                    if isinstance(derived_from, list) and len(derived_from) > 0:
-                                        first = derived_from[0]
-                                        if isinstance(first, dict):
-                                            parent_name = first.get('value') or first.get('text') or first.get('target')
-                                        else:
-                                            parent_name = str(first)
-                                    elif isinstance(derived_from, str):
-                                        parent_name = derived_from
-
-                                print(
-                                    f"  Sample {sample_name_export}: parent_name={parent_name}, sample_type={normalized_sample_type}")
-
-                                # Get organism from parent sample
-                                # For specimen_from_organism: get from organism sample
-                                # For pool_of_specimens: get from first specimen sample, then from its parent organism
-                                if parent_name:
-                                    parent_biosample_data = None
-
-                                    if normalized_sample_type == 'specimen_from_organism':
-
-                                        # Get from organism sample
-                                        if parent_name in organism_samples:
-                                            parent_model = organism_samples[parent_name]
-                                            if hasattr(parent_model, 'organism') and hasattr(parent_model,
-                                                                                             'organism_term_source_id'):
-                                                from app.validation.sample.organism_validator import OrganismValidator
-                                                org_validator = OrganismValidator()
-                                                parent_biosample_data = org_validator.export_to_biosample_format(
-                                                    parent_model)
-
-                                    elif normalized_sample_type == 'pool_of_specimens':
-
-                                        # Get from first specimen sample, then from its parent organism
-                                        # Find specimen sample in results
-                                        # Try both formats: with spaces and with underscores
-                                        specimen_results = results_by_type.get('specimen from organism',
-                                                                               {}) or results_by_type.get(
-                                            'specimen_from_organism', {}) or {}
-                                        specimen_valid_key = 'valid_specimen_from_organisms'
-                                        print(
-                                            f"  Pool sample {sample_name_export}: Looking for parent specimen '{parent_name}' in {specimen_valid_key}")
-                                        print(
-                                            f"  Available specimen samples: {[s.get('sample_name') for s in specimen_results.get(specimen_valid_key, [])][:5]}")
-                                        if specimen_valid_key in specimen_results:
-                                            found_specimen = False
-                                            for spec_sample in specimen_results[specimen_valid_key]:
-                                                if spec_sample.get('sample_name') == parent_name:
-                                                    found_specimen = True
-                                                    print(f"  Found parent specimen: {parent_name}")
-                                                    spec_model = spec_sample.get('model')
-                                                    if isinstance(spec_model, dict):
-                                                        spec_validator = self.validators.get('specimen_from_organism')
-                                                        if spec_validator:
-                                                            spec_model = _reconstruct_model_from_dict(
-                                                                spec_validator.get_model_class(), spec_model)
-
-                                                    # Get organism from specimen's parent
-                                                    spec_data = spec_sample.get('data', {})
-                                                    spec_derived_from = spec_data.get('Derived From') or spec_data.get(
-                                                        'derived_from') or []
-                                                    if not spec_derived_from and hasattr(spec_model, 'derived_from'):
-                                                        spec_derived_from = getattr(spec_model, 'derived_from', [])
-
-                                                    spec_parent_name = None
-                                                    if spec_derived_from:
-                                                        if isinstance(spec_derived_from, list) and len(
-                                                                spec_derived_from) > 0:
-                                                            first = spec_derived_from[0]
-                                                            if isinstance(first, dict):
-                                                                spec_parent_name = first.get('value') or first.get(
-                                                                    'text') or first.get('target')
-                                                            else:
-                                                                spec_parent_name = str(first)
-                                                        elif isinstance(spec_derived_from, str):
-                                                            spec_parent_name = spec_derived_from
-
-                                                    # Get organism from specimen's parent organism
-                                                    if spec_parent_name and spec_parent_name in organism_samples:
-                                                        print(f"  Found parent organism: {spec_parent_name}")
-                                                        parent_model = organism_samples[spec_parent_name]
-                                                        if hasattr(parent_model, 'organism') and hasattr(parent_model,
-                                                                                                         'organism_term_source_id'):
-                                                            from app.validation.sample.organism_validator import \
-                                                                OrganismValidator
-                                                            org_validator = OrganismValidator()
-                                                            parent_biosample_data = org_validator.export_to_biosample_format(
-                                                                parent_model)
-                                                            print(
-                                                                f"  Got organism data from parent: {parent_biosample_data.get('characteristics', {}).get('organism')}")
-                                                    else:
-                                                        print(
-                                                            f"  Parent organism '{spec_parent_name}' not found in organism_samples")
-                                                    break
-                                            if not found_specimen:
-                                                print(
-                                                    f"  Parent specimen '{parent_name}' not found in specimen_results")
-
-                                    elif normalized_sample_type == 'cell_specimen':
-                                        # Get from parent specimen sample, then from its parent organism
-                                        # Cell specimen is derived from specimen_from_organism
-                                        # Find specimen sample in results
-                                        # Try both formats: with spaces and with underscores
-                                        specimen_results = results_by_type.get('specimen from organism',
-                                                                               {}) or results_by_type.get(
-                                            'specimen_from_organism', {}) or {}
-                                        specimen_valid_key = 'valid_specimen_from_organisms'
-                                        print(
-                                            f"  Cell specimen {sample_name_export}: Looking for parent specimen '{parent_name}' in {specimen_valid_key}")
-                                        print(
-                                            f"  Available specimen samples: {[s.get('sample_name') for s in specimen_results.get(specimen_valid_key, [])][:5]}")
-                                        if specimen_valid_key in specimen_results:
-                                            found_specimen = False
-                                            for spec_sample in specimen_results[specimen_valid_key]:
-                                                if spec_sample.get('sample_name') == parent_name:
-                                                    found_specimen = True
-                                                    print(f"  Found parent specimen: {parent_name}")
-                                                    spec_model = spec_sample.get('model')
-                                                    if isinstance(spec_model, dict):
-                                                        spec_validator = self.validators.get('specimen_from_organism')
-                                                        if spec_validator:
-                                                            spec_model = _reconstruct_model_from_dict(
-                                                                spec_validator.get_model_class(), spec_model)
-
-                                                    # Get organism from specimen's parent
-                                                    spec_data = spec_sample.get('data', {})
-                                                    spec_derived_from = spec_data.get('Derived From') or spec_data.get(
-                                                        'derived_from') or []
-                                                    if not spec_derived_from and hasattr(spec_model, 'derived_from'):
-                                                        spec_derived_from = getattr(spec_model, 'derived_from', [])
-
-                                                    spec_parent_name = None
-                                                    if spec_derived_from:
-                                                        if isinstance(spec_derived_from, list) and len(
-                                                                spec_derived_from) > 0:
-                                                            first = spec_derived_from[0]
-                                                            if isinstance(first, dict):
-                                                                spec_parent_name = first.get('value') or first.get(
-                                                                    'text') or first.get('target')
-                                                            else:
-                                                                spec_parent_name = str(first)
-                                                        elif isinstance(spec_derived_from, str):
-                                                            spec_parent_name = spec_derived_from
-
-                                                    # Get organism from specimen's parent organism
-                                                    if spec_parent_name and spec_parent_name in organism_samples:
-                                                        print(f"  Found parent organism: {spec_parent_name}")
-                                                        parent_model = organism_samples[spec_parent_name]
-                                                        if hasattr(parent_model, 'organism') and hasattr(parent_model,
-                                                                                                         'organism_term_source_id'):
-                                                            from app.validation.sample.organism_validator import \
-                                                                OrganismValidator
-                                                            org_validator = OrganismValidator()
-                                                            parent_biosample_data = org_validator.export_to_biosample_format(
-                                                                parent_model)
-                                                            print(
-                                                                f"  Got organism data from parent: {parent_biosample_data.get('characteristics', {}).get('organism')}")
-                                                    else:
-                                                        print(
-                                                            f"  Parent organism '{spec_parent_name}' not found in organism_samples")
-                                                    break
-                                            if not found_specimen:
-                                                print(
-                                                    f"  Parent specimen '{parent_name}' not found in specimen_results")
-                                    
-                                    elif normalized_sample_type == 'organoid':
-                                        # Organoid: if organism is missing, get it from derived_from parent
-                                        # Search across all sample types in validation results
-                                        print(f"  Organoid {sample_name_export}: Looking for parent '{parent_name}' in validation results")
-                                        
-                                        found_parent = False
-                                        
-                                        # Search through all sample types in results_by_type
-                                        for sample_type_key, type_results in results_by_type.items():
-                                            if found_parent:
-                                                break
-                                            
-                                            # Get the valid samples key for this sample type
-                                            normalized_key = sample_type_key.replace(" ", "_")
-                                            valid_key = f'valid_{normalized_key}s'
-                                            # Handle special cases
-                                            if normalized_key.endswith('y'):
-                                                valid_key = f'valid_{normalized_key[:-1]}ies'
-                                            elif normalized_key == 'specimen_from_organism':
-                                                valid_key = 'valid_specimen_from_organisms'
-                                            elif normalized_key == 'pool_of_specimens':
-                                                valid_key = 'valid_pool_of_specimens'
-                                            
-                                            if valid_key in type_results:
-                                                for parent_sample in type_results[valid_key]:
-                                                    if parent_sample.get('sample_name') == parent_name:
-                                                        found_parent = True
-                                                        print(f"  Found parent '{parent_name}' as '{sample_type_key}'")
-                                                        
-                                                        # Get the validator for this sample type
-                                                        parent_validator = self.validators.get(sample_type_key)
-                                                        if not parent_validator:
-                                                            # Try with underscore
-                                                            parent_validator = self.validators.get(normalized_key)
-                                                        
-                                                        if parent_validator:
-                                                            # Get parent model and export biosample_data
-                                                            parent_model = parent_sample.get('model')
-                                                            if isinstance(parent_model, dict):
-                                                                parent_model = _reconstruct_model_from_dict(
-                                                                    parent_validator.get_model_class(), parent_model)
-                                                            
-                                                            parent_biosample_data = parent_validator.export_to_biosample_format(parent_model)
-                                                            parent_chars = parent_biosample_data.get('characteristics', {})
-                                                            
-                                                            if 'organism' in parent_chars and 'species' in parent_chars:
-                                                                parent_biosample_data = {
-                                                                    'characteristics': {
-                                                                        'organism': parent_chars['organism'],
-                                                                        'species': parent_chars['species']
-                                                                    }
-                                                                }
-                                                                print(
-                                                                    f"  Got organism data from parent: {parent_biosample_data.get('characteristics', {}).get('organism')}")
-                                                            else:
-                                                                print(
-                                                                    f"  Parent '{parent_name}' doesn't have organism/species in biosample_data")
-                                                                parent_biosample_data = None
-                                                        else:
-                                                            print(
-                                                                f"  No validator found for sample type '{sample_type_key}'")
-                                                            parent_biosample_data = None
-                                                        break
-                                        
-                                        if not found_parent:
-                                            print(
-                                                f"  Parent '{parent_name}' not found in validation results")
-
-                                    # Add organism and species if found
-                                    if parent_biosample_data and 'organism' in parent_biosample_data.get(
-                                            'characteristics', {}):
-                                        characteristics['organism'] = parent_biosample_data['characteristics'][
-                                            'organism']
-                                        characteristics['species'] = parent_biosample_data['characteristics']['species']
+                            if parent_name:
+                                parent_biosample_data = self._fetch_taxon_information_recursive(
+                                    parent_name,
+                                    results_by_type,
+                                    organism_samples,
+                                    biosample_exports
+                                )
+                                
+                                if parent_biosample_data and 'organism' in parent_biosample_data.get('characteristics', {}):
+                                    characteristics['organism'] = parent_biosample_data['characteristics']['organism']
+                                    characteristics['species'] = parent_biosample_data['characteristics']['species']
+                                    print(f"  {sample_name_export}: added organism via fallback lookup")
 
                         biosample_exports[sample_type].append({
                             'sample_name': valid_sample['sample_name'],
                             'biosample_format': biosample_data
                         })
 
-                        print(f"  [{idx + 1}/{len(results[valid_samples_key])}] Exported: {sample_name_export}")
+                        print(f"  [{idx + 1}/{count}] Exported: {sample_name_export}")
                     except Exception as e:
                         print(
-                            f"  [{idx + 1}/{len(results[valid_samples_key])}] Failed to export {sample_name_export}: {str(e)}")
+                            f"  [{idx + 1}/{count}] Failed to export {sample_name_export}: {str(e)}")
                         import traceback
                         traceback.print_exc()
 
@@ -974,8 +1225,8 @@ class UnifiedFAANGValidator:
             total_summary = validation_results.get('total_summary', {}) or {}
             valid_samples = total_summary.get('valid_samples', 0)
             invalid_samples = total_summary.get('invalid_samples', 0)
-            print(f"Valid samples: {valid_samples}")
-            print(f"Invalid samples: {invalid_samples}")
+            print('***************************************')
+            print(json.dumps(validation_results))
 
             biosample_exports = self.export_valid_samples_to_biosample(validation_results)
 
