@@ -1,11 +1,10 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Union, Literal, Optional
 from app.validation.validation_utils import (
-    normalize_ontology_term,
-    strip_and_convert_empty_to_none
+    normalize_ontology_term
 )
 from app.validation.sample.generic_validator_classes import get_ontology_validator
-from app.rulesets_pydantics.experiment_core_ruleset import ExperimentCoreMetadata
+from app.rulesets_pydantics.experiment.experiment_core_ruleset import ExperimentCoreMetadata
 
 
 class ExperimentTarget(BaseModel):
