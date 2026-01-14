@@ -377,9 +377,12 @@ class UnifiedFAANGValidator:
 
     @cprofiled()
     # async version for use in FastAPI endpoints
-    async def prefetch_all_ontology_terms_async(self, data: Dict[str, List[Dict[str, Any]]]):
+    async def prefetch_all_ontology_terms_async(self, data_type, data: Dict[str, List[Dict[str, Any]]]):
         # collect unique term IDs
-        term_ids = collect_ontology_terms_from_data(data)
+        if data_type == "experiment":
+            term_ids = collect_ontology_terms_from_experiments(data)
+        else:
+            term_ids = collect_ontology_terms_from_data(data)
 
         if not term_ids:
             print("No ontology terms to pre-fetch")
