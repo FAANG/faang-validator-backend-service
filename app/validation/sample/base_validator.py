@@ -59,7 +59,7 @@ class BaseValidator(ABC):
         
         # Set the shared ontology validator in context so Pydantic validators can use it
         if self.ontology_validator:
-            from app.validation.sample.generic_validator_classes import ontology_validator_context
+            from app.validation.generic_validator_classes import ontology_validator_context
             ontology_validator_context.set(self.ontology_validator)
 
         # pydantic validation
@@ -94,7 +94,7 @@ class BaseValidator(ABC):
             ontology_warnings_context.set([])
             # Clear the ontology validator from context
             try:
-                from app.validation.sample.generic_validator_classes import ontology_validator_context
+                from app.validation.generic_validator_classes import ontology_validator_context
                 ontology_validator_context.set(None)
             except:
                 pass

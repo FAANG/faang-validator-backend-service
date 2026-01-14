@@ -1,5 +1,5 @@
 from pydantic import Field, field_validator, model_validator
-from app.validation.sample.generic_validator_classes import get_ontology_validator
+from app.validation.generic_validator_classes import get_ontology_validator
 from app.validation.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
