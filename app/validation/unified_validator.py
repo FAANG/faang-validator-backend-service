@@ -1,10 +1,8 @@
 from datetime import datetime
 from typing import Dict, List, Any, Optional, get_args, get_origin, Union
-
 import requests
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
-
 from app.profiler import cprofiled
 from app.validation.sample.teleostei_embryo_validator import TeleosteiEmbryoValidator
 from app.validation.sample.organism_validator import OrganismValidator
@@ -18,15 +16,34 @@ from app.validation.sample.cell_culture_validator import CellCultureValidator
 from app.validation.sample.cell_line_validator import CellLineValidator
 from app.validation.sample.metadata_validator import SubmissionValidator, PersonValidator, OrganizationValidator, \
     AnalysisSubmissionValidator
-from app.validation.experiment_validator import ChipSeqInputDNAValidator, ChipSeqDNABindingProteinsValidator, \
-    RNASeqValidator
-from app.validation.analysis.analysis_validator import EVAAnalysisValidator, FAANGAnalysisValidator, \
-    ENAAnalysisValidator
+from app.validation.analysis.analysis_validator import (
+    ENAAnalysisValidator,
+    EVAAnalysisValidator,
+    FAANGAnalysisValidator
+)
 from app.validation.generic_validator_classes import (
     collect_ontology_terms_from_data,
+    collect_ontology_terms_from_experiments,
     OntologyValidator,
     RelationshipValidator
 )
+from app.validation.experiment.atac_seq_validator import ATACSeqValidator
+from app.validation.experiment.chip_seq_validator import (
+    ChIPSeqDNABindingProteinsValidator,
+    ChIPSeqInputDNAValidator
+)
+from app.validation.experiment.additional_experiment_validators import (
+    BSSeqValidator,
+    CAGESeqValidator,
+    DNaseSeqValidator,
+    EMSeqValidator,
+    HiCValidator,
+    RNASeqValidator,
+    scRNASeqValidator,
+    scATACSeqValidator,
+    WGSValidator
+)
+
 from app.validation.webin_submission import WebinBioSamplesSubmission
 
 
@@ -294,17 +311,7 @@ class UnifiedFAANGValidator:
         self.analysis_metadata_validators = {
             'submission': AnalysisSubmissionValidator(),
         }
-
-
         self.supported_analysis_metadata_types = set(self.analysis_metadata_validators.keys())
-
-        # experiment validators (keys must be lowercase with spaces)
-        self.experiment_validators = {
-            'chip-seq input dna': ChipSeqInputDNAValidator(),
-            'chip-seq dna-binding proteins': ChipSeqDNABindingProteinsValidator(),
-            'rna-seq': RNASeqValidator()
-        }
-        self.supported_experiment_types = set(self.experiment_validators.keys())
 
         # analysis validators
         self.analysis_validators = {
@@ -313,6 +320,48 @@ class UnifiedFAANGValidator:
             'faang': FAANGAnalysisValidator()
         }
         self.supported_analysis_types = set(self.analysis_validators.keys())
+
+        # experiment validators
+        self.experiment_validators = {
+            'atac-seq': ATACSeqValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'bs-seq': BSSeqValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'cage-seq': CAGESeqValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'chip-seq dna-binding proteins': ChIPSeqDNABindingProteinsValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'chip-seq input dna': ChIPSeqInputDNAValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'dnase-seq': DNaseSeqValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'em-seq': EMSeqValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'hi-c': HiCValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'rna-seq': RNASeqValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'scrna-seq': scRNASeqValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'snatac-seq': scATACSeqValidator(
+                ontology_validator=self.shared_ontology_validator
+            ),
+            'wgs': WGSValidator(
+                ontology_validator=self.shared_ontology_validator
+            )
+        }
+        self.supported_experiment_types = set(self.experiment_validators.keys())
+
 
     def prefetch_all_ontology_terms(self, data: Dict[str, List[Dict[str, Any]]]):
         # collect unique term IDs
@@ -387,8 +436,8 @@ class UnifiedFAANGValidator:
         all_results = {
             'sample_types_processed': [],
             'metadata_types_processed': [],
-            'experiment_types_processed': [],
             'analysis_types_processed': [],
+            'experiment_types_processed': [],
             'total_summary': {
                 'total_samples': 0,
                 'valid_samples': 0,
@@ -401,29 +450,32 @@ class UnifiedFAANGValidator:
                 'valid_metadata': 0,
                 'invalid_metadata': 0
             },
-            'experiment_summary': {
-                'total_experiments': 0,
-                'valid_experiments': 0,
-                'invalid_experiments': 0
-            },
             'analysis_summary': {
                 'total_analyses': 0,
                 'valid_analyses': 0,
                 'invalid_analyses': 0,
                 'warnings': 0
             },
+            'experiment_summary': {
+                'total_experiments': 0,
+                'valid_experiments': 0,
+                'invalid_experiments': 0,
+                'warnings': 0,
+                'relationship_errors': 0
+            },
             'sample_results': {},
             'metadata_results': {},
-            'experiment_results': {},
             'analysis_results': {},
+            'experiment_results': {},
             'sample_reports': {},
             'metadata_reports': {},
-            'experiment_reports': {},
-            'analysis_reports': {}
+            'analysis_reports': {},
+            'experiment_reports': {}
         }
 
         has_samples = any(k in self.supported_sample_types for k in data.keys())
         has_analyses = any(k in self.supported_analysis_types for k in data.keys())
+        has_experiments = any(k in self.supported_experiment_types for k in data.keys())
 
         if has_samples:
             print("Sample types in data:", [k for k in data.keys() if k in self.supported_sample_types])
@@ -463,37 +515,39 @@ class UnifiedFAANGValidator:
                     all_results['total_summary']['warnings'] += summary['warnings']
                     all_results['total_summary']['relationship_errors'] += summary['relationship_errors']
 
-        # Process metadata types
-        for metadata_type, metadata_records in data.items():
-            if metadata_type in self.supported_metadata_types or metadata_type in self.supported_analysis_metadata_types:
-                print(f"Validating {metadata_type} metadata...")
+            # Process metadata types
+            for metadata_type, metadata_records in data.items():
+                if metadata_type in self.supported_metadata_types or metadata_type in self.supported_analysis_metadata_types:
+                    print(f"Validating {metadata_type} metadata...")
 
-                if has_analyses and not has_samples and metadata_type in self.supported_analysis_metadata_types:
-                    validator = self.analysis_metadata_validators[metadata_type]
-                elif metadata_type in self.supported_metadata_types:
-                    validator = self.metadata_validators[metadata_type]
-                else:
-                    continue
+                    if has_analyses and not has_samples and metadata_type in self.supported_analysis_metadata_types:
+                        validator = self.analysis_metadata_validators[metadata_type]
+                    elif metadata_type in self.supported_metadata_types:
+                        validator = self.metadata_validators[metadata_type]
+                    else:
+                        continue
 
-                results = validator.validate_records(metadata_records)
+                    results = validator.validate_records(metadata_records)
 
-                # Store results
-                all_results['metadata_types_processed'].append(metadata_type)
-                all_results['metadata_results'][metadata_type] = results
+                    # Store results
+                    all_results['metadata_types_processed'].append(metadata_type)
+                    all_results['metadata_results'][metadata_type] = results
 
-                # Generate report
-                report = validator.generate_validation_report(results)
-                all_results['metadata_reports'][metadata_type] = report
+                    # Generate report
+                    report = validator.generate_validation_report(results)
+                    all_results['metadata_reports'][metadata_type] = report
 
-                # Update metadata summary (only if no error)
-                if 'error' not in results:
-                    summary = results['summary']
-                    all_results['metadata_summary']['total_metadata'] += summary['total']
-                    all_results['metadata_summary']['valid_metadata'] += summary['valid']
-                    all_results['metadata_summary']['invalid_metadata'] += summary['invalid']
-                else:
-                    # If there's an error (no data), still count it
-                    all_results['metadata_summary']['invalid_metadata'] += 1
+                    # Update metadata summary (only if no error)
+                    if 'error' not in results:
+                        summary = results['summary']
+                        all_results['metadata_summary']['total_metadata'] += summary['total']
+                        all_results['metadata_summary']['valid_metadata'] += summary['valid']
+                        all_results['metadata_summary']['invalid_metadata'] += summary['invalid']
+                    else:
+                        # If there's an error (no data), still count it
+                        all_results['metadata_summary']['invalid_metadata'] += 1
+
+
 
         # Process analysis types
         if has_analyses:
@@ -524,6 +578,36 @@ class UnifiedFAANGValidator:
                     all_results['analysis_summary']['invalid_analyses'] += summary['invalid']
                     all_results['analysis_summary']['warnings'] += summary['warnings']
 
+        if has_experiments:
+            print("Experiment types in data:", [k for k in data.keys() if k in self.supported_experiment_types])
+            for exp_type, experiments in data.items():
+                if exp_type in self.supported_experiment_types:
+                    if not experiments:
+                        print(f"No experiments found for type '{exp_type}'. Skipping.")
+                        continue
+
+                    print(f"Validating {len(experiments)} {exp_type} experiments...")
+
+                    validator = self.experiment_validators[exp_type]
+
+                    results = validator.validate_records(
+                        experiments,
+                        validate_relationships=validate_relationships,
+                        all_experiments=data
+                    )
+
+                    all_results['experiment_types_processed'].append(exp_type)
+                    all_results['experiment_results'][exp_type] = results
+
+                    report = validator.generate_validation_report(results)
+                    all_results['experiment_reports'][exp_type] = report
+
+                    summary = results['summary']
+                    all_results['experiment_summary']['total_experiments'] += summary['total']
+                    all_results['experiment_summary']['valid_experiments'] += summary['valid']
+                    all_results['experiment_summary']['invalid_experiments'] += summary['invalid']
+                    all_results['experiment_summary']['warnings'] += summary['warnings']
+                    all_results['experiment_summary']['relationship_errors'] += summary.get('relationship_errors', 0)
         return all_results
 
     def generate_unified_report(self, validation_results: Dict[str, Any]) -> str:
@@ -541,16 +625,16 @@ class UnifiedFAANGValidator:
                 report_lines.append(f"\n{validation_results['sample_reports'][sample_type]}")
                 report_lines.append("\n" + "-" * 60)
 
-        # Individual experiment reports
-        if validation_results.get('experiment_types_processed'):
-            for experiment_type in validation_results['experiment_types_processed']:
-                report_lines.append(f"\n{validation_results['experiment_reports'][experiment_type]}")
-                report_lines.append("\n" + "-" * 60)
-
-        # Analysis reports
-        if validation_results.get('analysis_types_processed'):
+        # analysis reports
+        if validation_results['analysis_types_processed']:
             for analysis_type in validation_results['analysis_types_processed']:
                 report_lines.append(f"\n{validation_results['analysis_reports'][analysis_type]}")
+                report_lines.append("\n" + "-" * 60)
+
+        # experiment reports
+        if validation_results['experiment_types_processed']:
+            for exp_type in validation_results['experiment_types_processed']:
+                report_lines.append(f"\n{validation_results['experiment_reports'][exp_type]}")
                 report_lines.append("\n" + "-" * 60)
 
         return "\n".join(report_lines)
@@ -1020,9 +1104,9 @@ class UnifiedFAANGValidator:
         return {
             'sample_types': list(self.supported_sample_types),
             'metadata_types': list(self.supported_metadata_types),
-            'experiment_types': list(self.supported_experiment_types),
             'analysis_types': list(self.supported_analysis_types),
-            'analysis_metadata_types': list(self.supported_analysis_metadata_types)
+            'analysis_metadata_types': list(self.supported_analysis_metadata_types),
+            'experiment_types': list(self.supported_experiment_types)
         }
 
     def submit_to_biosamples(
