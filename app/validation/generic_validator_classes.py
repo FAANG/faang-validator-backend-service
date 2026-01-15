@@ -4,10 +4,10 @@ import requests
 import asyncio
 import aiohttp
 import re
-
-from app.validation.constants import SPECIES_BREED_LINKS, ALLOWED_RELATIONSHIPS, ELIXIR_VALIDATOR_URL
 from contextvars import ContextVar
+from app.validation.constants import SPECIES_BREED_LINKS, ALLOWED_RELATIONSHIPS, ELIXIR_VALIDATOR_URL
 from app.validation.sample.base_validator import ontology_warnings_context
+from app.validation.validation_utils import normalize_ontology_term
 
 # Context variable to share OntologyValidator instance during Pydantic validation
 ontology_validator_context: ContextVar[Optional['OntologyValidator']] = ContextVar('ontology_validator', default=None)
@@ -291,6 +291,32 @@ def collect_ontology_terms_from_data(data: Dict[str, List[Dict]]) -> Set[str]:
                                 term_ids.add(term_value)
 
     return term_ids
+
+
+def collect_ontology_terms_from_experiments(experiment_data: Dict[str, List[Dict]]) -> set:
+    terms = set()
+
+    term_fields = [
+        'Term Source ID',
+        'ChIP Target Term Source ID'
+    ]
+
+    for exp_type, records in experiment_data.items():
+        for record in records:
+            for field in term_fields:
+                if field in record:
+                    term_value = record[field]
+                    if term_value and term_value not in [
+                        "restricted access",
+                        "not applicable",
+                        "not collected",
+                        "not provided",
+                        ""
+                    ]:
+                        term_value = normalize_ontology_term(term_value)
+                        terms.add(term_value)
+
+    return terms
 
 
 class BreedSpeciesValidator:

@@ -10,7 +10,7 @@ from app.validation.validation_utils import (
 )
 from typing import Optional, Union, Literal
 from app.rulesets_pydantics.sample.specimen_ruleset import FAANGSpecimenFromOrganismSample
-from app.validation.sample.generic_validator_classes import get_ontology_validator
+from app.validation.generic_validator_classes import get_ontology_validator
 
 
 class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
