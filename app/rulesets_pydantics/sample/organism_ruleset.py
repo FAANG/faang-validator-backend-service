@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from app.validation.sample.generic_validator_classes import BreedSpeciesValidator, get_ontology_validator
+from app.validation.generic_validator_classes import BreedSpeciesValidator, get_ontology_validator
 from app.validation.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
@@ -26,7 +26,7 @@ class HealthStatus(BaseModel):
 
         # Strip whitespace before normalizing
         v = v.strip() if isinstance(v, str) else v
-        
+
         # Normalize the term (convert underscore to colon)
         term = normalize_ontology_term(v)
 
