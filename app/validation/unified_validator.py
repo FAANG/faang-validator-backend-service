@@ -1,11 +1,18 @@
+import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional, get_args, get_origin, Union
+import uuid
+import subprocess
+import re
+import json
 
 import requests
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
+from app.conversions.generate_analysis_and_submission_xml import get_xml_files
 from app.profiler import cprofiled
+from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
 from app.validation.sample.teleostei_embryo_validator import TeleosteiEmbryoValidator
 from app.validation.sample.organism_validator import OrganismValidator
 from app.validation.sample.organoid_validator import OrganoidValidator
@@ -229,6 +236,28 @@ def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> Ba
                 constructed_data[key] = value
 
     return model_class.model_construct(**constructed_data)
+
+
+def _parse_submission_results(submission_results):
+    """Parse ENA submission results and return status"""
+    try:
+        if isinstance(submission_results, bytes):
+            result_str = submission_results.decode('utf-8')
+        else:
+            result_str = str(submission_results)
+
+        # Check for success indicators in ENA response
+        if 'success="true"' in result_str or '<RECEIPT' in result_str:
+            return 'Success'
+        elif 'error' in result_str.lower() or 'ERROR' in result_str:
+            return 'Error'
+        else:
+            # Default to success if no clear error
+            return 'Success'
+    except Exception as e:
+        print(f"Error parsing submission results: {e}")
+        return 'Error'
+
 
 
 class UnifiedFAANGValidator:
@@ -841,6 +870,7 @@ class UnifiedFAANGValidator:
             print(f"  - {sample_type}: {len(sample_list)} samples")
         return biosample_exports
 
+
     def _fetch_taxon_information_recursive(
             self,
             parent_id: str,
@@ -1309,4 +1339,39 @@ class UnifiedFAANGValidator:
             traceback.print_exc()
 
         return None
+
+    def submit_data_to_ena(self, results, credentials):
+        # Generate unique ID for this submission
+        submission_id = str(uuid.uuid4())
+        submission_path = ENA_TEST_SERVER if credentials['mode'] == 'test' else \
+            ENA_PROD_SERVER
+        submission_xml = f"{submission_id}_submission.xml"
+        prepare_analyses_data(results, submission_id)
+
+        username = credentials["username"]
+        password = credentials["password"]
+        analysis_xml = f"{submission_id}_analysis.xml"
+        password = re.escape(password)
+        submit_to_ena_process = subprocess.run(
+            f'curl -u {username}:{password} '
+            f'-F "SUBMISSION=@{submission_xml}" '
+            f'-F "ANALYSIS=@{analysis_xml}" '
+            f'"{submission_path}"',
+            shell=True, capture_output=True)
+
+        submission_results = submit_to_ena_process.stdout
+        parsed_results = _parse_submission_results(submission_results)
+        result_str = submission_results.decode('utf-8')
+        if parsed_results == 'Success':
+            return {'success': True, 'message': 'Successfully submitted to ENA', 'submission_results': result_str}
+        else:
+            return {'success': False, 'message': 'Submission failed', 'submission_results':
+                result_str, 'errors': [result_str]}
+
+
+
+
+def prepare_analyses_data(json_to_convert, submission_id):
+    return  get_xml_files(json_to_convert,submission_id)
+
 

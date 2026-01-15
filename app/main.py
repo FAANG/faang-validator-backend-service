@@ -8,6 +8,7 @@ import traceback
 from app.conversions.file_processor import parse_contents_api
 from app.profiler import cprofiled
 from app.validation.unified_validator import UnifiedFAANGValidator
+from app.analysis_submission import submit_analysis_to_ena_public
 
 app = FastAPI(
     title="FAANG Validation API",
@@ -51,6 +52,21 @@ class SubmissionResponse(BaseModel):
       
 class ValidationDataRequest(BaseModel):
     data: dict[str, list[dict[str, Any]]]
+
+
+class AnalysisSubmissionRequest(BaseModel):
+    data: Dict[str, Any]
+    webin_username: str
+    webin_password: str
+    mode: str = "test"
+
+
+class AnalysisSubmissionResponse(BaseModel):
+    success: bool
+    message: str
+    submission_results: Optional[str] = None
+    errors: Optional[List[str]] = None
+    info_messages: Optional[List[str]] = None
 
 # Health check endpoint
 @app.get("/")
@@ -190,7 +206,7 @@ async def export_valid_samples_endpoint():
     }
 
 
-@app.post("/submit-to-biosamples", response_model=SubmissionResponse)
+@app.post("/submit-to-bisamples", response_model=SubmissionResponse)
 async def submit_to_biosamples(request: SubmissionRequest):
     try:
         if request.mode not in ['test', 'prod']:
@@ -235,6 +251,69 @@ async def submit_to_biosamples(request: SubmissionRequest):
                 "message": str(e),
                 "type": type(e).__name__
             }
+        )
+
+
+
+@app.post("/submit-analysis", response_model=AnalysisSubmissionResponse)
+def submit_analysis(request: AnalysisSubmissionRequest):
+    """
+    Submit analysis records to ENA using the simplified public-only
+    Analysis submission logic (no private submissions, no proxy samples).
+    """
+    try:
+        if request.mode not in ["test", "prod"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Mode must be 'test' or 'prod'",
+            )
+
+        credentials = {
+            "username": request.webin_username,
+            "password": request.webin_password,
+            "mode": request.mode
+        }
+        print("ANalyisis api called")
+        print(f"Submitting to ENA via Webin: mode={request.mode}")
+        # print(f"Submitting to ENA via Webin: data={request.data}")
+        print(json.dumps(request.data))
+        result = validator.submit_data_to_ena(
+            results=request.data,
+            credentials=credentials
+        )
+        print("After submit ena ANalyisis api call ed")
+
+        if result.get("success"):
+            return AnalysisSubmissionResponse(
+                success=True,
+                message=result.get("message", "Successfully submitted to ENA"),
+                submission_results=result.get("submission_results"),
+                errors=result.get("errors"),
+                info_messages=result.get("info_messages"),
+            )
+
+        # Map failure into 400-style response body while still using 200 HTTP by default.
+        # If you prefer HTTP 400 on failure, raise HTTPException instead.
+        return AnalysisSubmissionResponse(
+            success=False,
+            message=result.get("message", "Submission to ENA failed"),
+            submission_results=result.get("submission_results"),
+            errors=result.get("errors", ["Unknown error"]),
+            info_messages=result.get("info_messages"),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error during public analysis submission: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Public analysis submission failed",
+                "message": str(e),
+                "type": type(e).__name__,
+            },
         )
 
 
