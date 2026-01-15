@@ -297,7 +297,7 @@ def collect_ontology_terms_from_experiments(experiment_data: Dict[str, List[Dict
     terms = set()
 
     term_fields = [
-        'Experiment Target Term Source ID',
+        'Term Source ID',
         'ChIP Target Term Source ID'
     ]
 

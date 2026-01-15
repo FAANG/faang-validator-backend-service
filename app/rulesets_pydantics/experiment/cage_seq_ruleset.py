@@ -13,7 +13,7 @@ class CAGESeqExperiment(ExperimentCoreMetadata):
     # required fields
     experiment_target: str = Field(..., alias="Experiment Target")
     experiment_target_term_source_id: Literal["SO:0000315", "restricted access"] = Field(
-        ..., alias="Experiment Target Term Source ID")
+        ..., alias="Term Source ID")
     cage_protocol: str = Field(..., alias="CAGE Protocol")
     restriction_enzyme_target_sequence: str = Field(..., alias="Restriction Enzyme Target Sequence")
     

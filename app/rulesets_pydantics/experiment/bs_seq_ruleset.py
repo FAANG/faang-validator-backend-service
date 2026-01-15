@@ -14,7 +14,7 @@ class BSSeqExperiment(ExperimentCoreMetadata):
     # required fields
     experiment_target: str = Field(..., alias="Experiment Target")
     experiment_target_term_source_id: Literal["GO:0006306", "restricted access"] = Field(
-        ..., alias="Experiment Target Term Source ID")
+        ..., alias="Term Source ID")
     library_selection: Literal["RRBS", "WGBS", "restricted access"] = Field(
         ..., alias="Library Selection")
     bisulfite_conversion_protocol: str = Field(..., alias="Bisulfite Conversion Protocol")

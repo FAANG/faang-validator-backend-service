@@ -14,7 +14,7 @@ class RNASeqExperiment(ExperimentCoreMetadata):
     experiment_target: Union[str, Literal["restricted access"]] = Field(
         ..., alias="Experiment Target")
     experiment_target_term_source_id: Union[str, Literal["restricted access"]] = Field(
-        ..., alias="Experiment Target Term Source ID")
+        ..., alias="Term Source ID")
     
     rna_preparation_3_adapter_ligation_protocol: str = Field(
         ..., alias="Rna Preparation 3' adapter ligation protocol")

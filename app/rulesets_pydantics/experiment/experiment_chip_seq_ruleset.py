@@ -18,7 +18,7 @@ class ChIPSeqExperiment(ExperimentCoreMetadata):
         "SO:0000235",  # histone_modification
         "EFO:0005031",  # input DNA
         "restricted access"
-    ] = Field(..., alias="Experiment Target Term Source ID")
+    ] = Field(..., alias="Term Source ID")
 
     chip_protocol: str = Field(..., alias="ChIP Protocol")
 

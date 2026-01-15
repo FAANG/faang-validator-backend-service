@@ -104,7 +104,7 @@ class BaseExperimentValidator(ABC):
         ontology_warnings_context.set([])
 
         if self.ontology_validator:
-            from validation.generic_validator_classes import ontology_validator_context
+            from app.validation.generic_validator_classes import ontology_validator_context
             ontology_validator_context.set(self.ontology_validator)
         
         # Pydantic validation
@@ -139,7 +139,7 @@ class BaseExperimentValidator(ABC):
             ontology_warnings_context.set([])
             # Clear the ontology validator from context
             try:
-                from validation.generic_validator_classes import ontology_validator_context
+                from app.validation.generic_validator_classes import ontology_validator_context
                 ontology_validator_context.set(None)
             except:
                 pass

@@ -13,7 +13,7 @@ from app.validation.generic_validator_classes import get_ontology_validator
 class EMSeqExperiment(ExperimentCoreMetadata):
     # required fields
     experiment_target: str = Field(..., alias="Experiment Target")
-    experiment_target_term_source_id: Literal["GO:0006306", "restricted access"] = Field(..., alias="Experiment Target Term Source ID")
+    experiment_target_term_source_id: Literal["GO:0006306", "restricted access"] = Field(..., alias="Term Source ID")
     
     library_selection: Literal[
         "whole-genome",

@@ -12,7 +12,7 @@ class HiCExperiment(ExperimentCoreMetadata):
     # required fields
     experiment_target: str = Field(..., alias="Experiment Target")
     experiment_target_term_source_id: Literal["GO:0000785", "restricted access"] = Field(
-        ..., alias="Experiment Target Term Source ID")
+        ..., alias="Term Source ID")
     restriction_enzyme: str = Field(..., alias="Restriction Enzyme")
     restriction_site: str = Field(..., alias="Restriction Site")
     hi_c_protocol: str = Field(..., alias="Hi-C Protocol")

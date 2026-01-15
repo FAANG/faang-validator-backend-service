@@ -11,7 +11,7 @@ from app.validation.generic_validator_classes import get_ontology_validator
 class DNaseSeqExperiment(ExperimentCoreMetadata):
     # required fields
     experiment_target: str = Field(..., alias="Experiment Target")
-    experiment_target_term_source_id: Literal["SO:0001747", "restricted access"] = Field(..., alias="Experiment Target Term Source ID")
+    experiment_target_term_source_id: Literal["SO:0001747", "restricted access"] = Field(..., alias="Term Source ID")
     
     dnase_protocol: str = Field(..., alias="Dnase Protocol")
     

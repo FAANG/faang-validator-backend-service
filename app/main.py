@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Literal
 import json
 import traceback
 
@@ -22,6 +22,7 @@ class ValidationRequest(BaseModel):
     data: Dict[str, List[Dict[str, Any]]]
     validate_relationships: bool = True
     validate_ontology_text: bool = True
+    data_type: Literal["sample", "experiment", "analysis"]
 
 
 class ValidationResponse(BaseModel):
@@ -51,6 +52,7 @@ class SubmissionResponse(BaseModel):
       
 class ValidationDataRequest(BaseModel):
     data: dict[str, list[dict[str, Any]]]
+    data_type: Literal["sample", "experiment", "analysis"]
 
 # Health check endpoint
 @app.get("/")
@@ -80,18 +82,27 @@ async def get_supported_types():
     return validator.get_supported_types()
 
 
+async def prefetch_data_by_type(data: Dict[str, List[Dict[str, Any]]], data_type: str):
+    if data_type == "sample":
+        print("Pre-fetching sample ontology terms...")
+        await validator.prefetch_all_ontology_terms_async("sample", data)
+
+        print("Pre-fetching BioSample IDs...")
+        await validator.prefetch_all_biosample_ids_async(data)
+
+    elif data_type == "experiment":
+        print("Pre-fetching experiment ontology terms...")
+        await validator.prefetch_all_ontology_terms_async("experiment", data)
+
+    elif data_type == "analysis":
+        print("Skipping pre-fetch for analysis data (no ontology terms or relationships)")
+
 @app.post("/validate", response_model=ValidationResponse)
 async def validate_data(request: ValidationRequest):
     try:
-        if request.validate_ontology_text:
-            print("Pre-fetching ontology terms...")
-            await validator.prefetch_all_ontology_terms_async(request.data)
+        await prefetch_data_by_type(request.data, request.data_type)
 
-        if request.validate_relationships:
-            print("Pre-fetching BioSample IDs...")
-            await validator.prefetch_all_biosample_ids_async(request.data)
-
-        print("Running validation...")
+        print(f"Running validation for data_type: {request.data_type}...")
         results = validator.validate_all_records(
             request.data,
             validate_relationships=request.validate_relationships,
@@ -123,7 +134,21 @@ async def validate_data(request: ValidationRequest):
 
 @cprofiled(limit=25)
 @app.post("/validate-file")
-async def validate_file(file: UploadFile = File(...)):
+async def validate_file(
+    file: UploadFile = File(...),
+    data_type: Literal["sample", "experiment", "analysis"] = Query(
+        ...,
+        description="Type of data in the file: 'sample', 'experiment', or 'analysis'"
+    ),
+    validate_relationships: bool = Query(
+        default=True,
+        description="Whether to validate cross-record relationships"
+    ),
+    validate_ontology_text: bool = Query(
+        default=True,
+        description="Whether to validate ontology term text matches"
+    )
+):
     try:
         contents = await file.read()
 
@@ -144,11 +169,7 @@ async def validate_file(file: UploadFile = File(...)):
             results = {}
             report = ""
         else:
-            print("Pre-fetching ontology terms...")
-            await validator.prefetch_all_ontology_terms_async(records)
-
-            print("Pre-fetching BioSample IDs...")
-            await validator.prefetch_all_biosample_ids_async(records)
+            await prefetch_data_by_type(records, data_type)
 
             print("Running validation...")
             results = validator.validate_all_records(
@@ -256,12 +277,7 @@ async def validate_data(request: ValidationDataRequest):
             results = []  # No records to validate
         else:
             # validation
-
-            print("Pre-fetching ontology terms...")
-            await validator.prefetch_all_ontology_terms_async(request.data)
-
-            print("Pre-fetching BioSample IDs...")
-            await validator.prefetch_all_biosample_ids_async(request.data)
+            await prefetch_data_by_type(request.data, request.data_type)
 
             print("Running validation...")
             results = validator.validate_all_records(

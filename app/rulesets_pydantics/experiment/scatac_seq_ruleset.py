@@ -13,7 +13,7 @@ class scATACSeqExperiment(ExperimentCoreMetadata):
     # required fields
     experiment_target: str = Field(..., alias="Experiment Target")
     experiment_target_term_source_id: Literal["SO:0001747", "restricted access"] = Field(
-        ..., alias="Experiment Target Term Source ID")
+        ..., alias="Term Source ID")
 
     transposase_protocol: str = Field(..., alias="Transposase Protocol")
     

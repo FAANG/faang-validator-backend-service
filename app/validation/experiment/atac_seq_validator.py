@@ -1,8 +1,8 @@
 from typing import Type
 from pydantic import BaseModel
-from validation.experiment.base_experiment_validator import BaseExperimentValidator
-from validation.generic_validator_classes import OntologyValidator
-from rulesets_pydantics.experiment.atac_seq_ruleset import ATACSeqExperiment
+from app.validation.experiment.base_experiment_validator import BaseExperimentValidator
+from app.validation.generic_validator_classes import OntologyValidator
+from app.rulesets_pydantics.experiment.atac_seq_ruleset import ATACSeqExperiment
 
 
 class ATACSeqValidator(BaseExperimentValidator):
