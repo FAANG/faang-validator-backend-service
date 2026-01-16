@@ -1,6 +1,10 @@
-from app.submission.sample.biosample_submitter import BioSampleSubmitter
-from app.submission.sample.webin_submission import WebinBioSamplesSubmission
+from .sample import BioSampleSubmitter, WebinBioSamplesSubmission
+from .analysis import AnalysisSubmitter
 
-__all__ = ['BioSampleSubmitter', 'WebinBioSamplesSubmission']
+__all__ = [
+    'BioSampleSubmitter',
+    'WebinBioSamplesSubmission',
+    'AnalysisSubmitter'
+]
 
 __version__ = '1.0.0'
