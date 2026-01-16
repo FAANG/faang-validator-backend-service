@@ -1,5 +1,5 @@
-from .biosample_submitter import BioSampleSubmitter
-from .webin_submission import WebinBioSamplesSubmission
+from app.submission.sample.biosample_submitter import BioSampleSubmitter
+from app.submission.sample.webin_submission import WebinBioSamplesSubmission
 
 __all__ = ['BioSampleSubmitter', 'WebinBioSamplesSubmission']
 

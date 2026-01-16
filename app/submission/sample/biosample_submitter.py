@@ -4,7 +4,7 @@ import requests
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
-from app.submission.webin_submission import WebinBioSamplesSubmission
+from app.submission.sample.webin_submission import WebinBioSamplesSubmission
 
 
 def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> BaseModel:
