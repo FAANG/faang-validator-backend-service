@@ -8,6 +8,7 @@ import traceback
 from app.conversions.file_processor import parse_contents_api
 from app.profiler import cprofiled
 from app.validation.unified_validator import UnifiedFAANGValidator
+from app.submission import BioSampleSubmitter
 
 app = FastAPI(
     title="FAANG Validation API",
@@ -235,13 +236,13 @@ async def submit_to_biosamples(request: SubmissionRequest):
                 detail="Mode must be 'test' or 'prod'"
             )
 
-        print(f"Submitting to BioSamples via Webin: mode={request.mode}")
-        print(f"Submitting to BioSamples via Webin: data={request.validation_results}")
-        result = validator.submit_to_biosamples(
+
+        submitter = BioSampleSubmitter(validator.sample_validators)
+        result = submitter.submit_to_biosamples(
             validation_results=request.validation_results,
             webin_username=request.webin_username,
             webin_password=request.webin_password,
-            domain=None,
+            domain=request.domain,
             mode=request.mode,
             update_existing=request.update_existing
         )
