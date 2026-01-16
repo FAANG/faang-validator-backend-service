@@ -226,7 +226,7 @@ async def export_valid_samples_endpoint():
     }
 
 
-@app.post("/submit-to-bisamples", response_model=SubmissionResponse)
+@app.post("/submit-to-biosamples", response_model=SubmissionResponse)
 async def submit_to_biosamples(request: SubmissionRequest):
     try:
         if request.mode not in ['test', 'prod']:
