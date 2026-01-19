@@ -3,16 +3,25 @@ from typing import Dict, Any, Optional
 import uuid
 
 
-def get_xml_files(json_data: Dict[str, Any], output_filename: Optional[str] = None):
+def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None):
+    if submission_id:
+        analysis_filename = f"{submission_id}_analysis.xml"
+        submission_filename = f"{submission_id}_submission.xml"
+    else:
+        unique_id = str(uuid.uuid4())
+        analysis_filename = f"{unique_id}_analysis.xml"
+        submission_filename = f"{unique_id}_submission.xml"
 
-    analysis_xml = generate_analysis_xml(json_data,
-                                         output_filename)
+    # Generate XML files
+    analysis_result = generate_analysis_xml(json_data, analysis_filename)
+    if analysis_result.startswith('Error:'):
+        return analysis_result, None
 
+    submission_result = generate_submission_xml(json_data, submission_filename)
+    if submission_result.startswith('Error:'):
+        return analysis_result, submission_result
 
-    submission_xml = generate_submission_xml(json_data,
-                                         output_filename)
-    return analysis_xml, submission_xml
-
+    return analysis_result, submission_result
 
 def generate_analysis_xml(json_data: Dict[str, Any], output_filename: Optional[str] = None) -> str:
     """
@@ -71,7 +80,7 @@ def generate_analysis_xml(json_data: Dict[str, Any], output_filename: Optional[s
     try:
 
         ena_data = json_data.get('analysis_results', {}).get('ena', {})
-        faang_data = json_data.get('analysis_results', {}).get('ena', {})
+        faang_data = json_data.get('analysis_results', {}).get('faang', {})
 
         ena_records = ena_data.get('valid', []) if isinstance(ena_data, dict) else []
         faang_records = faang_data.get('valid', []) if isinstance(faang_data, dict) else []
@@ -362,6 +371,9 @@ def generate_submission_xml(json_data: Dict[str, Any], output_filename: Optional
         submission_set = etree.Element('SUBMISSION_SET')
         submission_xml = etree.ElementTree(submission_set)
 
+        if output_filename is None:
+            output_filename = f"{uuid.uuid4()}_submission.xml"
+
         # Process each submission record
         for record in submission_records:
             # Get model data
@@ -387,10 +399,6 @@ def generate_submission_xml(json_data: Dict[str, Any], output_filename: Optional
                 # Release immediately in case of public submission
                 action_elt = etree.SubElement(actions_elt, 'ACTION')
                 etree.SubElement(action_elt, 'RELEASE')
-
-            # Generate output filename if not provided
-
-            output_filename = f"{uuid.uuid4()}_submission.xml"
 
         # Write XML file
         submission_xml.write(
