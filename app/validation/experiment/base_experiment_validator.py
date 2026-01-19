@@ -194,7 +194,7 @@ class BaseExperimentValidator(ABC):
         
         for i, record in enumerate(records):
             # Use sample_descriptor or experiment_alias as identifier
-            identifier = record.get('Sample Descriptor', 
+            sample_descriptor = record.get('Sample Descriptor',
                                    record.get('Experiment Alias', f'{experiment_type}_{i}'))
             
             model, errors = self.validate_single_record(record)
@@ -202,7 +202,7 @@ class BaseExperimentValidator(ABC):
             if model and not errors['errors']:
                 valid_entry = {
                     'index': i,
-                    'identifier': identifier,
+                    'sample_descriptor': sample_descriptor,
                     'model': model,
                     'data': record,
                     'warnings': errors['warnings'],
@@ -222,7 +222,7 @@ class BaseExperimentValidator(ABC):
             else:
                 results['invalid'].append({
                     'index': i,
-                    'identifier': identifier,
+                    'sample_descriptor': sample_descriptor,
                     'data': record,
                     'errors': errors
                 })
@@ -249,18 +249,18 @@ class BaseExperimentValidator(ABC):
         
         # Add to valid experiments
         for exp in results['valid']:
-            identifier = exp['identifier']
-            if identifier in relationship_errors:
-                exp['relationship_errors'] = relationship_errors[identifier]
+            sample_descriptor = exp['sample_descriptor']
+            if sample_descriptor in relationship_errors:
+                exp['relationship_errors'] = relationship_errors[sample_descriptor]
                 results['summary']['relationship_errors'] += 1
         
         # Add to invalid experiments
         for exp in results['invalid']:
-            identifier = exp['identifier']
-            if identifier in relationship_errors:
+            sample_descriptor = exp['sample_descriptor']
+            if sample_descriptor in relationship_errors:
                 if 'relationship_errors' not in exp['errors']:
                     exp['errors']['relationship_errors'] = []
-                exp['errors']['relationship_errors'] = relationship_errors[identifier]
+                exp['errors']['relationship_errors'] = relationship_errors[sample_descriptor]
                 results['summary']['relationship_errors'] += 1
     
     def _get_relationship_errors(self, all_experiments: Dict[str, List[Dict]]) -> Dict[str, List[str]]:
@@ -306,7 +306,7 @@ class BaseExperimentValidator(ABC):
             report.append("\n\nValidation Errors:")
             report.append("-" * 20)
             for exp in validation_results['invalid']:
-                report.append(f"\nExperiment: {exp['identifier']} (index: {exp['index']})")
+                report.append(f"\nExperiment: {exp['sample_descriptor']} (index: {exp['index']})")
                 
                 # Field errors from Pydantic validation
                 for field, field_errors in exp['errors'].get('field_errors', {}).items():
@@ -344,7 +344,7 @@ class BaseExperimentValidator(ABC):
                         report.append("-" * 30)
                         warnings_found = True
                     
-                    report.append(f"\nExperiment: {exp['identifier']} (index: {exp['index']})")
+                    report.append(f"\nExperiment: {exp['sample_descriptor']} (index: {exp['index']})")
                     
                     # Field warnings
                     for field, field_warnings in exp.get('field_warnings', {}).items():

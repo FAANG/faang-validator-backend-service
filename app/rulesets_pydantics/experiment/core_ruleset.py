@@ -53,8 +53,9 @@ class ExperimentCoreMetadata(BaseModel):
     
     extraction_protocol: str = Field(..., alias="Extraction Protocol")
 
+    sample_descriptor: str = Field(None, alias="Sample Descriptor")
+
     # Optional fields
-    sample_descriptor: Optional[str] = Field(None, alias="Sample Descriptor")
     experiment_alias: Optional[str] = Field(None, alias="Experiment Alias")
 
     secondary_project: Optional[List[Literal[

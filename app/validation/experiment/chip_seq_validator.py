@@ -36,7 +36,7 @@ class ChIPSeqDNABindingProteinsValidator(BaseExperimentValidator):
                 input_dna_aliases.add(alias)
         
         for exp in dna_binding_experiments:
-            identifier = exp.get('Sample Descriptor', 
+            sample_descriptor = exp.get('Sample Descriptor',
                                exp.get('Experiment Alias', 'unknown'))
             control_exp = exp.get('Control Experiment')
             
@@ -54,9 +54,9 @@ class ChIPSeqDNABindingProteinsValidator(BaseExperimentValidator):
             if self.check_control_in_ena(control_exp):
                 continue
             
-            if identifier not in relationship_errors:
-                relationship_errors[identifier] = []
-            relationship_errors[identifier].append(
+            if sample_descriptor not in relationship_errors:
+                relationship_errors[sample_descriptor] = []
+            relationship_errors[sample_descriptor].append(
                 f"Control experiment '{control_exp}' not found in this submission or in ENA"
             )
         
