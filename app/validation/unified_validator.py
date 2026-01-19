@@ -435,10 +435,6 @@ class UnifiedFAANGValidator:
 
         return "\n".join(report_lines)
 
-
-
-
-
     def get_supported_types(self) -> Dict[str, List[str]]:
         return {
             'sample_types': list(self.supported_sample_types),

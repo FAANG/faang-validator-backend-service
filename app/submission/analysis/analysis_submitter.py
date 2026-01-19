@@ -31,7 +31,7 @@ class AnalysisSubmitter:
     def __init__(self):
         pass
 
-    def _prepare_analyses_data(self, json_to_convert: Dict[str, Any], submission_id: str) -> None:
+    def _prepare_analyses_data(self, json_to_convert: Dict[str, Any], submission_id: str):
         return get_xml_files(json_to_convert, submission_id)
 
     def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str]) -> Dict[str, Any]:
@@ -43,12 +43,24 @@ class AnalysisSubmitter:
                 else ENA_PROD_SERVER
             )
             
-            # Prepare XML files
-            submission_xml = f"{submission_id}_submission.xml"
-            analysis_xml = f"{submission_id}_analysis.xml"
-            
             print(f"Preparing analysis data for submission ID: {submission_id}")
-            self._prepare_analyses_data(results, submission_id)
+
+            analysis_xml, submission_xml = self._prepare_analyses_data(results, submission_id)
+
+            if analysis_xml.startswith('Error:'):
+                return {
+                    'success': False,
+                    'message': 'Failed to generate analysis XML',
+                    'errors': [analysis_xml]
+                }
+
+            if submission_xml and submission_xml.startswith('Error:'):
+                return {
+                    'success': False,
+                    'message': 'Failed to generate submission XML',
+                    'errors': [submission_xml]
+                }
+
             print(f"Generated XML files: {submission_xml}, {analysis_xml}")
 
             # Get credentials
@@ -73,17 +85,26 @@ class AnalysisSubmitter:
             result_str = submission_results.decode('utf-8')
             
             print(f"Submission result: {parsed_results}")
-            
+
+            try:
+                import os
+                if os.path.exists(analysis_xml):
+                    os.remove(analysis_xml)
+                if os.path.exists(submission_xml):
+                    os.remove(submission_xml)
+            except Exception as e:
+                print(f"Warning: Could not cleanup XML files: {e}")
+
             if parsed_results == 'Success':
                 return {
-                    'success': True, 
-                    'message': 'Successfully submitted to ENA', 
+                    'success': True,
+                    'message': 'Successfully submitted to ENA',
                     'submission_results': result_str
                 }
             else:
                 return {
-                    'success': False, 
-                    'message': 'Submission failed', 
+                    'success': False,
+                    'message': 'Submission failed',
                     'submission_results': result_str,
                     'errors': [result_str]
                 }
