@@ -8,7 +8,7 @@ import traceback
 from app.conversions.file_processor import parse_contents_api
 from app.profiler import cprofiled
 from app.validation.unified_validator import UnifiedFAANGValidator
-from app.submission import BioSampleSubmitter
+from app.submission import BioSampleSubmitter, ExperimentSubmitter, AnalysisSubmitter
 
 app = FastAPI(
     title="FAANG Validation API",
@@ -60,10 +60,24 @@ class AnalysisSubmissionRequest(BaseModel):
     data: Dict[str, Any]
     webin_username: str
     webin_password: str
-    mode: str = "test"
+    mode: str
 
 
 class AnalysisSubmissionResponse(BaseModel):
+    success: bool
+    message: str
+    submission_results: Optional[str] = None
+    errors: Optional[List[str]] = None
+    info_messages: Optional[List[str]] = None
+
+class ExperimentSubmissionRequest(BaseModel):
+    data: Dict[str, Any]
+    webin_username: str
+    webin_password: str
+    mode: str
+
+
+class ExperimentSubmissionResponse(BaseModel):
     success: bool
     message: str
     submission_results: Optional[str] = None
@@ -298,7 +312,9 @@ def submit_analysis(request: AnalysisSubmissionRequest):
         print(f"Submitting to ENA via Webin: mode={request.mode}")
         # print(f"Submitting to ENA via Webin: data={request.data}")
         print(json.dumps(request.data))
-        result = validator.submit_data_to_ena(
+        submitter = AnalysisSubmitter()
+
+        result = submitter.submit_to_ena(
             results=request.data,
             credentials=credentials
         )
@@ -338,6 +354,66 @@ def submit_analysis(request: AnalysisSubmissionRequest):
         )
 
 
+@app.post("/submit-experiment", response_model=ExperimentSubmissionResponse)
+def submit_experiment(request: ExperimentSubmissionRequest):
+    try:
+        if request.mode not in ["test", "prod"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Mode must be 'test' or 'prod'",
+            )
+
+        credentials = {
+            "username": request.webin_username,
+            "password": request.webin_password,
+            "mode": request.mode
+        }
+
+        print("Experiment submission API called")
+        print(f"Submitting to ENA: mode={request.mode}")
+
+        # Initialize the experiment submitter
+        submitter = ExperimentSubmitter()
+
+        # Submit to ENA
+        result = submitter.submit_to_ena(
+            results=request.data,
+            credentials=credentials
+        )
+
+        print("After submit to ENA - Experiment submission")
+
+        if result.get("success"):
+            return ExperimentSubmissionResponse(
+                success=True,
+                message=result.get("message", "Successfully submitted experiments to ENA"),
+                submission_results=result.get("submission_results"),
+                errors=result.get("errors"),
+                info_messages=result.get("info_messages"),
+            )
+
+        return ExperimentSubmissionResponse(
+            success=False,
+            message=result.get("message", "Experiment submission to ENA failed"),
+            submission_results=result.get("submission_results"),
+            errors=result.get("errors", ["Unknown error"]),
+            info_messages=result.get("info_messages"),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error during experiment submission: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Experiment submission failed",
+                "message": str(e),
+                "type": type(e).__name__,
+            },
+        )
+
 
 @cprofiled(limit=25)
 @app.post("/validate-data")
@@ -353,7 +429,7 @@ async def validate_data(request: ValidationDataRequest):
 
         # Check if records is empty
         if not request.data:
-            results = []  # No records to validate
+            results = []
         else:
             # validation
             await prefetch_data_by_type(request.data, request.data_type)
