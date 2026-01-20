@@ -48,17 +48,59 @@ def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None
     return experiment_result, run_result, study_result, submission_result
 
 
+def convert_unit_fields_to_dicts(model: Dict[str, Any]) -> Dict[str, Any]:
+    # unit field pairs (main_field, unit_field)
+    UNIT_FIELD_PAIRS = [
+        ("Sampling to Preparation Interval", "Unit"),
+        ("Library Preparation Location Longitude", "Library Preparation Location Longitude Unit"),
+        ("Library Preparation Location Latitude", "Library Preparation Location Latitude Unit"),
+        ("Library Preparation Date", "Library Preparation Date Unit"),
+        ("Sequencing Location Longitude", "Sequencing Location Longitude Unit"),
+        ("Sequencing Location Latitude", "Sequencing Location Latitude Unit"),
+        ("Sequencing Date", "Sequencing Date Unit"),
+    ]
+
+    converted = dict(model)
+
+    for main_field, unit_field in UNIT_FIELD_PAIRS:
+        if main_field in converted and unit_field in converted:
+            value = converted[main_field]
+            units = converted[unit_field]
+
+            converted[main_field] = {
+                "value": value,
+                "units": units
+            }
+
+            del converted[unit_field]
+
+    return converted
+
+def convert_ontology_fields_to_dicts(model: Dict[str, Any]) -> Dict[str, Any]:
+    # ontology field pairs (main_field, term_field)
+    ONTOLOGY_FIELD_PAIRS = [
+        ("Experiment Target", "Term Source ID"),
+        ("ChIP Target", "ChIP Target Term Source ID"),
+    ]
+
+    converted = dict(model)
+
+    for main_field, term_field in ONTOLOGY_FIELD_PAIRS:
+        if main_field in converted and term_field in converted:
+            # get the text and term values
+            text_value = converted[main_field]
+            term_value = converted[term_field]
+
+            converted[main_field] = {
+                "text": text_value,
+                "term": term_value
+            }
+
+            del converted[term_field]
+
+    return converted
+
 def generate_experiment_xml(json_data: Dict[str, Any], output_filename: Optional[str] = None) -> str:
-    """
-    Generate experiment XML file from JSON data.
-    
-    Args:
-        json_data: Dictionary containing experiment validation results
-        output_filename: Optional filename for the XML file
-    
-    Returns:
-        str: Path to the generated XML file, or 'Error: ...' if there was an error
-    """
     try:
         # Get experiment_ena data (ENA-specific metadata)
         experiment_results = json_data.get('experiment_results', {})
@@ -233,14 +275,10 @@ def find_faang_experiment(experiment_results: Dict[str, Any], experiment_alias: 
 
 
 def parse_faang_experiment(faang_data: Dict[str, Any], experiment_attributes_elt):
-    """
-    Parse FAANG experiment data and add as experiment attributes.
-    
-    Args:
-        faang_data: Dictionary containing model and experiment_type
-        experiment_attributes_elt: XML element to add attributes to
-    """
     model = faang_data.get('model', {})
+
+    model = convert_ontology_fields_to_dicts(model)
+    model = convert_unit_fields_to_dicts(model)
     
     # Exclude these fields from attributes (structural fields)
     excluded_fields = {'Experiment Alias', 'Sample Descriptor'}
@@ -262,15 +300,28 @@ def parse_faang_experiment(faang_data: Dict[str, Any], experiment_attributes_elt
                     etree.SubElement(experiment_attribute_elt, 'TAG').text = tag_name
                     etree.SubElement(experiment_attribute_elt, 'VALUE').text = str(item)
         elif isinstance(field_value, dict):
-            # Handle ontology term fields (e.g., chip target, Experiment Target)
+            # ontology term fields (e.g., chip target, Experiment Target)
             text_value = field_value.get('text', '')
             term_value = field_value.get('term', '')
-            
+
+            value = field_value.get('value', '')
+            units = field_value.get('units', '')
+
             if text_value:
-                experiment_attribute_elt = etree.SubElement(
-                    experiment_attributes_elt, 'EXPERIMENT_ATTRIBUTE')
-                etree.SubElement(experiment_attribute_elt, 'TAG').text = tag_name
-                etree.SubElement(experiment_attribute_elt, 'VALUE').text = str(text_value)
+                final_value = text_value
+            elif value:
+                final_value = value
+            else:
+                continue
+
+            experiment_attribute_elt = etree.SubElement(
+                experiment_attributes_elt, 'EXPERIMENT_ATTRIBUTE')
+            etree.SubElement(experiment_attribute_elt, 'TAG').text = tag_name
+            etree.SubElement(experiment_attribute_elt, 'VALUE').text = str(final_value)
+
+            if units:
+                etree.SubElement(experiment_attribute_elt, 'UNITS').text = str(units)
+
         else:
             # Handle simple string/numeric fields
             if field_value and (isinstance(field_value, str) and field_value.strip() or field_value):
