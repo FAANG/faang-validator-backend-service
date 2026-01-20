@@ -8,15 +8,6 @@ from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
 
 
 def _parse_submission_results(submission_results) -> str:
-    """
-    Parse ENA submission results to determine success or failure.
-    
-    Args:
-        submission_results: Response from ENA submission
-    
-    Returns:
-        str: 'Success' or 'Error'
-    """
     try:
         if isinstance(submission_results, bytes):
             result_str = submission_results.decode('utf-8')
@@ -37,37 +28,14 @@ def _parse_submission_results(submission_results) -> str:
 
 
 class ExperimentSubmitter:
-    """
-    Handles submission of experiment data to ENA.
-    """
-    
+
     def __init__(self):
         pass
     
-    def _prepare_experiment_data(self, json_to_convert: Dict[str, Any], submission_id: str):
-        """
-        Prepare experiment data by generating XML files.
-        
-        Args:
-            json_to_convert: Validated experiment data
-            submission_id: Unique submission ID
-        
-        Returns:
-            Tuple of XML file paths (experiment, run, study, submission)
-        """
-        return get_xml_files(json_to_convert, submission_id)
+    def _prepare_experiment_data(self, json_to_convert: Dict[str, Any], submission_id: str, action: str = "submission"):
+        return get_xml_files(json_to_convert, submission_id, action=action)
     
-    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str]) -> Dict[str, Any]:
-        """
-        Submit experiment data to ENA.
-        
-        Args:
-            results: Validation results containing experiment data
-            credentials: Dictionary containing username, password, and mode (test/prod)
-        
-        Returns:
-            Dict containing submission results
-        """
+    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[str, Any]:
         try:
             submission_id = str(uuid.uuid4())
             
@@ -80,7 +48,7 @@ class ExperimentSubmitter:
             
             # Generate XML files
             experiment_xml, run_xml, study_xml, submission_xml = self._prepare_experiment_data(
-                results, submission_id
+                results, submission_id, action=action
             )
             
             # Check for errors in XML generation
@@ -149,9 +117,10 @@ class ExperimentSubmitter:
                 print(f"Warning: Could not cleanup XML files: {e}")
             
             if parsed_results == 'Success':
+                action_message = "updated in" if action == "update" else "submitted to"
                 return {
                     'success': True,
-                    'message': 'Successfully submitted to ENA',
+                    'message': f'Successfully {action_message} ENA',
                     'submission_results': result_str
                 }
             else:

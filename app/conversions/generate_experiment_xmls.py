@@ -5,17 +5,7 @@ import datetime
 import re
 
 
-def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None):
-    """
-    Generate all XML files needed for experiment submission.
-    
-    Args:
-        json_data: Dictionary containing validation results
-        submission_id: Optional submission ID for file naming
-    
-    Returns:
-        Tuple of (experiment_xml, run_xml, study_xml, submission_xml) file paths
-    """
+def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None, action: str = "submission"):
     if submission_id:
         experiment_filename = f"{submission_id}_experiment.xml"
         run_filename = f"{submission_id}_run.xml"
@@ -41,7 +31,7 @@ def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None
     if study_result.startswith('Error:'):
         return experiment_result, run_result, study_result, None
     
-    submission_result = generate_submission_xml(json_data, submission_filename)
+    submission_result = generate_submission_xml(json_data, submission_filename, action=action)
     if submission_result.startswith('Error:'):
         return experiment_result, run_result, study_result, submission_result
     
