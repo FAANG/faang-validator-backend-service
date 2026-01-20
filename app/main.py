@@ -308,9 +308,7 @@ def submit_analysis(request: AnalysisSubmissionRequest):
             "password": request.webin_password,
             "mode": request.mode
         }
-        print("ANalyisis api called")
         print(f"Submitting to ENA via Webin: mode={request.mode}")
-        # print(f"Submitting to ENA via Webin: data={request.data}")
         print(json.dumps(request.data))
         submitter = AnalysisSubmitter()
 
@@ -318,7 +316,6 @@ def submit_analysis(request: AnalysisSubmissionRequest):
             results=request.data,
             credentials=credentials
         )
-        print("After submit ena ANalyisis api call ed")
 
         if result.get("success"):
             return AnalysisSubmissionResponse(
