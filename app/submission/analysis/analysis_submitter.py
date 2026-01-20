@@ -32,7 +32,7 @@ class AnalysisSubmitter:
     def __init__(self):
         pass
 
-    def _prepare_analyses_data(self, json_to_convert: Dict[str, Any], submission_id: str):
+    def _prepare_analyses_data(self, json_to_convert: Dict[str, Any], submission_id: str, action: str = "submission"):
         prepared_data = copy.deepcopy(json_to_convert)
 
         # convert Pydantic models to dicts - analysis_results
@@ -51,10 +51,10 @@ class AnalysisSubmitter:
                         if 'model' in record and hasattr(record['model'], 'model_dump'):
                             record['model'] = record['model'].model_dump(by_alias=True)
 
-        return get_xml_files(prepared_data, submission_id)
+        return get_xml_files(prepared_data, submission_id, action=action)
 
 
-    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str]) -> Dict[str, Any]:
+    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[str, Any]:
         try:
             submission_id = str(uuid.uuid4())
 
@@ -65,7 +65,7 @@ class AnalysisSubmitter:
             
             print(f"Preparing analysis data for submission ID: {submission_id}")
 
-            analysis_xml, submission_xml = self._prepare_analyses_data(results, submission_id)
+            analysis_xml, submission_xml = self._prepare_analyses_data(results, submission_id, action=action)
 
             if analysis_xml.startswith('Error:'):
                 return {
@@ -116,9 +116,10 @@ class AnalysisSubmitter:
                 print(f"Warning: Could not cleanup XML files: {e}")
 
             if parsed_results == 'Success':
+                action_message = "updated in" if action == "update" else "submitted to"
                 return {
                     'success': True,
-                    'message': 'Successfully submitted to ENA',
+                    'message': f'Successfully {action_message} ENA',
                     'submission_results': result_str
                 }
             else:

@@ -61,6 +61,7 @@ class AnalysisSubmissionRequest(BaseModel):
     webin_username: str
     webin_password: str
     mode: str
+    action: str = "submission"
 
 
 class AnalysisSubmissionResponse(BaseModel):
@@ -304,34 +305,40 @@ def submit_analysis(request: AnalysisSubmissionRequest):
                 detail="Mode must be 'test' or 'prod'",
             )
 
+        if request.action not in ["submission", "update"]:  # ← ADDED validation
+            raise HTTPException(
+                status_code=400,
+                detail="Action must be 'submission' or 'update'",
+            )
+
         credentials = {
             "username": request.webin_username,
             "password": request.webin_password,
             "mode": request.mode
         }
-        print(f"Submitting to ENA via Webin: mode={request.mode}")
+        print(f"Submitting to ENA via Webin: mode={request.mode}, action={request.action}")
         print(json.dumps(request.data))
         submitter = AnalysisSubmitter()
 
         result = submitter.submit_to_ena(
             results=request.data,
-            credentials=credentials
+            credentials=credentials,
+            action=request.action
         )
 
+        action_word = "update" if request.action == "update" else "submission"
         if result.get("success"):
             return AnalysisSubmissionResponse(
                 success=True,
-                message=result.get("message", "Successfully submitted to ENA"),
+                message=result.get("message", f"Successful analyses {action_word} in ENA"),
                 submission_results=result.get("submission_results"),
                 errors=result.get("errors"),
                 info_messages=result.get("info_messages"),
             )
 
-        # Map failure into 400-style response body while still using 200 HTTP by default.
-        # If you prefer HTTP 400 on failure, raise HTTPException instead.
         return AnalysisSubmissionResponse(
             success=False,
-            message=result.get("message", "Submission to ENA failed"),
+            message=result.get("message", f"Analysis {action_word} to ENA failed"),
             submission_results=result.get("submission_results"),
             errors=result.get("errors", ["Unknown error"]),
             info_messages=result.get("info_messages"),
@@ -340,12 +347,12 @@ def submit_analysis(request: AnalysisSubmissionRequest):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error during public analysis submission: {str(e)}")
+        print(f"Error during analysis {request.action}: {str(e)}")
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail={
-                "error": "Public analysis submission failed",
+                "error": f"Analysis {request.action} failed",
                 "message": str(e),
                 "type": type(e).__name__,
             },
@@ -389,7 +396,7 @@ def submit_experiment(request: ExperimentSubmissionRequest):
         if result.get("success"):
             return ExperimentSubmissionResponse(
                 success=True,
-                message=result.get("message", f"Successfully {action_word} experiments in ENA"),
+                message=result.get("message", f"Successful experiments {action_word} in ENA"),
                 submission_results=result.get("submission_results"),
                 errors=result.get("errors"),
                 info_messages=result.get("info_messages"),
