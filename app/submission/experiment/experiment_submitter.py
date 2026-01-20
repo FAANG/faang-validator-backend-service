@@ -1,5 +1,6 @@
 import uuid
 import subprocess
+import copy
 import re
 from typing import Dict, Any
 
@@ -31,9 +32,29 @@ class ExperimentSubmitter:
 
     def __init__(self):
         pass
-    
+
     def _prepare_experiment_data(self, json_to_convert: Dict[str, Any], submission_id: str, action: str = "submission"):
-        return get_xml_files(json_to_convert, submission_id, action=action)
+        prepared_data = copy.deepcopy(json_to_convert)
+
+        # convert Pydantic models to dicts - experiment_results
+        if 'experiment_results' in prepared_data:
+            for exp_type, results in prepared_data['experiment_results'].items():
+                if isinstance(results, dict) and 'valid' in results:
+                    for record in results['valid']:
+                        if 'model' in record and hasattr(record['model'], 'model_dump'):
+                            record['model'] = record['model'].model_dump(by_alias=True)
+
+        # convert Pydantic models to dicts - metadata_results
+        if 'metadata_results' in prepared_data:
+            for metadata_type, results in prepared_data['metadata_results'].items():
+                if isinstance(results, dict) and 'valid' in results:
+                    for record in results['valid']:
+                        if 'model' in record and hasattr(record['model'], 'model_dump'):
+                            record['model'] = record['model'].model_dump(by_alias=True)
+
+        return get_xml_files(prepared_data, submission_id, action=action)
+
+
     
     def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[str, Any]:
         try:
