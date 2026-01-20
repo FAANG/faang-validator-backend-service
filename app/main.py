@@ -75,6 +75,7 @@ class ExperimentSubmissionRequest(BaseModel):
     webin_username: str
     webin_password: str
     mode: str
+    action: str = "submission"
 
 
 class ExperimentSubmissionResponse(BaseModel):
@@ -360,14 +361,19 @@ def submit_experiment(request: ExperimentSubmissionRequest):
                 detail="Mode must be 'test' or 'prod'",
             )
 
+        if request.action not in ["submission", "update"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Action must be 'submission' or 'update'",
+            )
+
         credentials = {
             "username": request.webin_username,
             "password": request.webin_password,
             "mode": request.mode
         }
 
-        print("Experiment submission API called")
-        print(f"Submitting to ENA: mode={request.mode}")
+        print(f"Submitting to ENA: mode={request.mode}, action={request.action}")
 
         # Initialize the experiment submitter
         submitter = ExperimentSubmitter()
@@ -375,15 +381,15 @@ def submit_experiment(request: ExperimentSubmissionRequest):
         # Submit to ENA
         result = submitter.submit_to_ena(
             results=request.data,
-            credentials=credentials
+            credentials=credentials,
+            action=request.action
         )
 
-        print("After submit to ENA - Experiment submission")
-
+        action_word = "update" if request.action == "update" else "submission"
         if result.get("success"):
             return ExperimentSubmissionResponse(
                 success=True,
-                message=result.get("message", "Successfully submitted experiments to ENA"),
+                message=result.get("message", f"Successfully {action_word} experiments in ENA"),
                 submission_results=result.get("submission_results"),
                 errors=result.get("errors"),
                 info_messages=result.get("info_messages"),
@@ -391,7 +397,7 @@ def submit_experiment(request: ExperimentSubmissionRequest):
 
         return ExperimentSubmissionResponse(
             success=False,
-            message=result.get("message", "Experiment submission to ENA failed"),
+            message=result.get("message", f"Experiment {action_word} to ENA failed"),
             submission_results=result.get("submission_results"),
             errors=result.get("errors", ["Unknown error"]),
             info_messages=result.get("info_messages"),
@@ -400,12 +406,12 @@ def submit_experiment(request: ExperimentSubmissionRequest):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error during experiment submission: {str(e)}")
+        print(f"Error during experiment {request.action}: {str(e)}")
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail={
-                "error": "Experiment submission failed",
+                "error": f"Experiment {request.action} failed",
                 "message": str(e),
                 "type": type(e).__name__,
             },
