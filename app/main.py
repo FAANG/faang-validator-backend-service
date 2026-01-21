@@ -264,9 +264,10 @@ async def submit_to_biosamples(request: SubmissionRequest):
         )
 
         if result['success']:
+            action_word = "updated" if request.update_existing else "submitted"
             return SubmissionResponse(
                 success=True,
-                message=f"Successfully submitted {result['submitted_count']} samples to BioSamples",
+                message=f"Successfully {action_word} {result['submitted_count']} samples to BioSamples",
                 biosamples_ids=result['biosamples_ids'],
                 submitted_count=result['submitted_count'],
                 errors=result.get('errors', [])

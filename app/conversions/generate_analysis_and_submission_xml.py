@@ -24,61 +24,7 @@ def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None
     return analysis_result, submission_result
 
 def generate_analysis_xml(json_data: Dict[str, Any], output_filename: Optional[str] = None) -> str:
-    """
-    Generate analysis XML file from JSON data.
-
-    Args:
-        json_data: Dictionary containing 'ena' and 'faang' keys with validation results.
-                  Expected structure:
-                  {
-                      'ena': {
-                          'valid': [
-                              {
-                                  'model': {
-                                      'Alias': '...',
-                                      'Analysis Type': '...',
-                                      'Study': '...',
-                                      'Title': '...',  # optional
-                                      'Description': '...',  # optional
-                                      'Samples': [...],  # optional
-                                      'Experiments': [...],  # optional
-                                      'Runs': [...],  # optional
-                                      'Related Analyses': [...],  # optional
-                                      'File Names': [...],
-                                      'File Types': [...],
-                                      'Checksum Methods': [...],
-                                      'Checksums': [...],
-                                      'Analysis Center': '...',  # optional
-                                      'Analysis Date': '...',  # optional
-                                      'Unit': '...',  # optional
-                                  }
-                              }
-                          ]
-                      },
-                      'faang': {
-                          'valid': [
-                              {
-                                  'model': {
-                                      'Alias': '...',
-                                      'Project': '...',
-                                      'Assay Type': '...',
-                                      'Analysis Protocol': '...',
-                                      'Secondary Project': [...],  # optional
-                                      'Analysis Code': '...',  # optional
-                                      'Reference Genome': '...',  # optional
-                                  }
-                              }
-                          ]
-                      }
-                  }
-        output_filename: Optional filename for the XML file. If not provided,
-                        generates a UUID-based filename.
-
-    Returns:
-        str: Path to the generated XML file, or 'Error: ...' if there was an error.
-    """
     try:
-
         ena_data = json_data.get('analysis_results', {}).get('ena', {})
         faang_data = json_data.get('analysis_results', {}).get('faang', {})
 
