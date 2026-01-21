@@ -172,11 +172,6 @@ class WebinBioSamplesSubmission:
             existing_biosample_entry = self.fetch_biosample_data(accession)
 
             if existing_biosample_entry:
-                """
-                In BioSamples, updating a sample overwrites its existing content with the new one. 
-                To preserve existing attributes, first download the sample, 
-                build a new version including existing and new attributes, and resubmit the new content.
-                """
                 updated_biosample_entry = copy.deepcopy(existing_biosample_entry)
                 tmp['characteristics']['sample name'] = existing_biosample_entry['characteristics']['sample name']
 
