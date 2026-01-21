@@ -485,6 +485,59 @@ class RelationshipValidator:
 
         return biosample_ids
 
+
+    # ENA Experiment Cache (for ChIP-seq validation)
+    def collect_control_experiments_from_data(self, data: Dict[str, List[Dict]]) -> Set[str]:
+        control_experiments = set()
+
+        chip_seq_data = data.get('chip-seq dna-binding proteins', [])
+
+        for record in chip_seq_data:
+            control_exp = record.get('Control Experiment')
+            if control_exp and control_exp not in [
+                "not applicable",
+                "not collected",
+                "not provided",
+                "restricted access"
+            ]:
+                control_experiments.add(control_exp)
+
+        return control_experiments
+
+    async def batch_check_ena_experiments(self, experiment_ids: Set[str]) -> Dict[str, bool]:
+        results = {}
+
+        if not experiment_ids:
+            return results
+
+        print(f"Pre-fetching {len(experiment_ids)} ENA experiment IDs...")
+
+        async def fetch_ena_experiment(session: aiohttp.ClientSession, experiment_id: str) -> tuple:
+            try:
+                url = f'https://www.ebi.ac.uk/ena/browser/api/summary/{experiment_id}'
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        total = result.get('total', 0)
+                        exists = int(total) > 0
+                        return experiment_id, exists
+            except Exception as e:
+                print(f"Error checking ENA for {experiment_id}: {e}")
+
+            return experiment_id, False
+
+        async with aiohttp.ClientSession() as session:
+            tasks = [fetch_ena_experiment(session, exp_id) for exp_id in experiment_ids]
+            completed = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for result in completed:
+                if isinstance(result, tuple):
+                    exp_id, exists = result
+                    results[exp_id] = exists
+
+        print(f"Pre-fetch complete. Found {sum(results.values())} existing experiments in ENA.")
+        return results
+
     def validate_organism_relationships(self, organisms: List[Dict[str, Any]]) -> Dict[str, ValidationResult]:
         results = {}
 

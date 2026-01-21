@@ -1,6 +1,4 @@
 from typing import Type, Dict, List
-import requests
-import json
 from pydantic import BaseModel
 from app.validation.experiment.base_experiment_validator import BaseExperimentValidator
 from app.validation.generic_validator_classes import OntologyValidator
@@ -11,6 +9,10 @@ from app.rulesets_pydantics.experiment.experiment_chip_seq_ruleset import (
 
 
 class ChIPSeqDNABindingProteinsValidator(BaseExperimentValidator):
+
+    def __init__(self, ontology_validator=None, ena_cache: Dict[str, bool] = None):
+        super().__init__(ontology_validator)
+        self.ena_cache = ena_cache or {}
 
     def _initialize_validators(self):
         if self.ontology_validator is None:
@@ -61,24 +63,10 @@ class ChIPSeqDNABindingProteinsValidator(BaseExperimentValidator):
             )
         
         return relationship_errors
-    
+
     def check_control_in_ena(self, experiment_alias: str) -> bool:
-        try:
-            url = f'https://www.ebi.ac.uk/ena/browser/api/summary/{experiment_alias}'
-            response = requests.get(url, timeout=10)
-            
-            if response.status_code == 200:
-                result = json.loads(response.content)
-                total = result.get('total', 0)
-                if isinstance(total, (int, str)):
-                    return int(total) > 0
-        except requests.exceptions.Timeout:
-            print(f"Timeout checking ENA for experiment: {experiment_alias}")
-        except requests.exceptions.RequestException as e:
-            print(f"Error checking ENA for experiment {experiment_alias}: {e}")
-        except Exception as e:
-            print(f"Unexpected error checking ENA for experiment {experiment_alias}: {e}")
-        
+        if experiment_alias in self.ena_cache:
+            return self.ena_cache[experiment_alias]
         return False
 
 
