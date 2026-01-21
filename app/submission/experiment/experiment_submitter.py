@@ -4,7 +4,7 @@ import copy
 import re
 from typing import Dict, Any
 
-from app.conversions.generate_analysis_and_submission_xml import get_xml_files
+from app.conversions.generate_experiment_xmls import get_xml_files
 from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
 
 
@@ -14,7 +14,7 @@ def _parse_submission_results(submission_results) -> str:
             result_str = submission_results.decode('utf-8')
         else:
             result_str = str(submission_results)
-
+        
         # Check for success indicators in ENA response
         if 'success="true"' in result_str or '<RECEIPT' in result_str:
             return 'Success'
@@ -28,16 +28,17 @@ def _parse_submission_results(submission_results) -> str:
         return 'Error'
 
 
-class AnalysisSubmitter:
+class ExperimentSubmitter:
+
     def __init__(self):
         pass
 
-    def _prepare_analyses_data(self, json_to_convert: Dict[str, Any], submission_id: str, action: str = "submission"):
+    def _prepare_experiment_data(self, json_to_convert: Dict[str, Any], submission_id: str, action: str = "submission"):
         prepared_data = copy.deepcopy(json_to_convert)
 
-        # convert Pydantic models to dicts - analysis_results
-        if 'analysis_results' in prepared_data:
-            for analysis_type, results in prepared_data['analysis_results'].items():
+        # convert Pydantic models to dicts - experiment_results
+        if 'experiment_results' in prepared_data:
+            for exp_type, results in prepared_data['experiment_results'].items():
                 if isinstance(results, dict) and 'valid' in results:
                     for record in results['valid']:
                         if 'model' in record and hasattr(record['model'], 'model_dump'):
@@ -54,35 +55,54 @@ class AnalysisSubmitter:
         return get_xml_files(prepared_data, submission_id, action=action)
 
 
+    
     def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[str, Any]:
         try:
             submission_id = str(uuid.uuid4())
-
+            
             submission_path = (
-                ENA_TEST_SERVER if credentials['mode'] == 'test' 
+                ENA_TEST_SERVER if credentials['mode'] == 'test'
                 else ENA_PROD_SERVER
             )
             
-            print(f"Preparing analysis data for submission ID: {submission_id}")
-
-            analysis_xml, submission_xml = self._prepare_analyses_data(results, submission_id, action=action)
-
-            if analysis_xml.startswith('Error:'):
+            print(f"Preparing experiment data for submission ID: {submission_id}")
+            
+            # Generate XML files
+            experiment_xml, run_xml, study_xml, submission_xml = self._prepare_experiment_data(
+                results, submission_id, action=action
+            )
+            
+            # Check for errors in XML generation
+            if experiment_xml and experiment_xml.startswith('Error:'):
                 return {
                     'success': False,
-                    'message': 'Failed to generate analysis XML',
-                    'errors': [analysis_xml]
+                    'message': 'Failed to generate experiment XML',
+                    'errors': [experiment_xml]
                 }
-
+            
+            if run_xml and run_xml.startswith('Error:'):
+                return {
+                    'success': False,
+                    'message': 'Failed to generate run XML',
+                    'errors': [run_xml]
+                }
+            
+            if study_xml and study_xml.startswith('Error:'):
+                return {
+                    'success': False,
+                    'message': 'Failed to generate study XML',
+                    'errors': [study_xml]
+                }
+            
             if submission_xml and submission_xml.startswith('Error:'):
                 return {
                     'success': False,
                     'message': 'Failed to generate submission XML',
                     'errors': [submission_xml]
                 }
-
-            print(f"Generated XML files: {submission_xml}, {analysis_xml}")
-
+            
+            print(f"Generated XML files: {submission_xml}, {experiment_xml}, {run_xml}, {study_xml}")
+            
             # Get credentials
             username = credentials["username"]
             password = credentials["password"]
@@ -93,28 +113,30 @@ class AnalysisSubmitter:
             submit_to_ena_process = subprocess.run(
                 f'curl -u {username}:{password_escaped} '
                 f'-F "SUBMISSION=@{submission_xml}" '
-                f'-F "ANALYSIS=@{analysis_xml}" '
+                f'-F "EXPERIMENT=@{experiment_xml}" '
+                f'-F "RUN=@{run_xml}" '
+                f'-F "STUDY=@{study_xml}" '
                 f'"{submission_path}"',
-                shell=True, 
+                shell=True,
                 capture_output=True
             )
-
-            # parse results
+            
+            # Parse results
             submission_results = submit_to_ena_process.stdout
             parsed_results = _parse_submission_results(submission_results)
             result_str = submission_results.decode('utf-8')
             
             print(f"Submission result: {parsed_results}")
-
+            
+            # Cleanup XML files
             try:
                 import os
-                if os.path.exists(analysis_xml):
-                    os.remove(analysis_xml)
-                if os.path.exists(submission_xml):
-                    os.remove(submission_xml)
+                for xml_file in [experiment_xml, run_xml, study_xml, submission_xml]:
+                    if xml_file and os.path.exists(xml_file):
+                        os.remove(xml_file)
             except Exception as e:
                 print(f"Warning: Could not cleanup XML files: {e}")
-
+            
             if parsed_results == 'Success':
                 action_message = "updated in" if action == "update" else "submitted to"
                 return {
@@ -129,7 +151,7 @@ class AnalysisSubmitter:
                     'submission_results': result_str,
                     'errors': [result_str]
                 }
-
+        
         except Exception as e:
             print(f"Error during ENA submission: {str(e)}")
             import traceback

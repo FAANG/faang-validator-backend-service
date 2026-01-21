@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional
 import uuid
 
 
-def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None):
+def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None, action: str = "submission"):
     if submission_id:
         analysis_filename = f"{submission_id}_analysis.xml"
         submission_filename = f"{submission_id}_submission.xml"
@@ -17,7 +17,7 @@ def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None
     if analysis_result.startswith('Error:'):
         return analysis_result, None
 
-    submission_result = generate_submission_xml(json_data, submission_filename)
+    submission_result = generate_submission_xml(json_data, submission_filename, action=action)
     if submission_result.startswith('Error:'):
         return analysis_result, submission_result
 
