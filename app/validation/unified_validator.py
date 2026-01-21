@@ -126,7 +126,8 @@ class UnifiedFAANGValidator:
                 ontology_validator=self.shared_ontology_validator
             ),
             'chip-seq dna-binding proteins': ChIPSeqDNABindingProteinsValidator(
-                ontology_validator=self.shared_ontology_validator
+                ontology_validator=self.shared_ontology_validator,
+                ena_cache = {}
             ),
             'chip-seq input dna': ChIPSeqInputDNAValidator(
                 ontology_validator=self.shared_ontology_validator
@@ -220,6 +221,21 @@ class UnifiedFAANGValidator:
 
         print(
             f"Pre-fetch complete. BioSample cache now contains {len(self.shared_relationship_validator.biosamples_cache)} entries.")
+
+    @cprofiled()
+    async def prefetch_ena_experiment_ids_async(self, data: Dict[str, List[Dict[str, Any]]]):
+        control_exp_ids = self.shared_relationship_validator.collect_control_experiments_from_data(data)
+
+        if not control_exp_ids:
+            print("No control experiments to pre-fetch")
+            return
+
+        ena_cache = await self.shared_relationship_validator.batch_check_ena_experiments(control_exp_ids)
+
+        if 'chip-seq dna-binding proteins' in self.experiment_validators:
+            self.experiment_validators['chip-seq dna-binding proteins'].ena_cache = ena_cache
+
+        print(f"Pre-fetch complete. ENA cache contains {len(ena_cache)} experiments.")
 
     @cprofiled()
     def validate_all_records(

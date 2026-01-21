@@ -126,6 +126,9 @@ async def prefetch_data_by_type(data: Dict[str, List[Dict[str, Any]]], data_type
         print("Pre-fetching experiment ontology terms...")
         await validator.prefetch_all_ontology_terms_async("experiment", data)
 
+        print("Pre-fetching ENA experiment IDs...")
+        await validator.prefetch_ena_experiment_ids_async(data)
+
     elif data_type == "analysis":
         print("Skipping pre-fetch for analysis data (no ontology terms or relationships)")
 
