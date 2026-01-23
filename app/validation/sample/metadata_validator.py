@@ -96,6 +96,7 @@ class OrganizationValidator(BaseMetadataValidator):
     def __init__(self):
         super().__init__(FAANGOrganization, 'organization', 'Organization', 'organizations')
 
+
 class AnalysisSubmissionValidator(BaseMetadataValidator):
     def __init__(self):
         super().__init__(AnalysisSubmission, 'submission', 'Submission', 'submissions')
