@@ -1,16 +1,21 @@
 from lxml import etree
 from typing import Dict, Any, Optional
 import uuid
+from pathlib import Path
 
 
 def get_xml_files(json_data: Dict[str, Any], submission_id: Optional[str] = None, action: str = "submission"):
+    # create XMLs directory if it doesn't exist
+    xml_dir = Path("XMLs")
+    xml_dir.mkdir(exist_ok=True)
+
     if submission_id:
-        analysis_filename = f"{submission_id}_analysis.xml"
-        submission_filename = f"{submission_id}_submission.xml"
+        analysis_filename = f"XMLs/{submission_id}_analysis.xml"
+        submission_filename = f"XMLs/{submission_id}_submission.xml"
     else:
         unique_id = str(uuid.uuid4())
-        analysis_filename = f"{unique_id}_analysis.xml"
-        submission_filename = f"{unique_id}_submission.xml"
+        analysis_filename = f"XMLs/{unique_id}_analysis.xml"
+        submission_filename = f"XMLs/{unique_id}_submission.xml"
 
     # Generate XML files
     analysis_result = generate_analysis_xml(json_data, analysis_filename)
