@@ -57,7 +57,8 @@ class ValidationDataRequest(BaseModel):
 
 
 class AnalysisSubmissionRequest(BaseModel):
-    data: Dict[str, Any]
+    validation_results: Dict[str, Any]
+    original_data: Dict[str, Any]  # original json with submission sheet
     webin_username: str
     webin_password: str
     mode: str
@@ -349,17 +350,36 @@ def submit_analysis(request: AnalysisSubmissionRequest):
                 detail="Action must be 'submission' or 'update'",
             )
 
+        print(f"Preparing analysis submission: mode={request.mode}, action={request.action}")
+
+        prepared_results = dict(request.validation_results)
+
+        # add submission records
+        if 'submission' in request.original_data:
+            if 'metadata_results' not in prepared_results:
+                prepared_results['metadata_results'] = {}
+            if 'submission' not in prepared_results['metadata_results']:
+                prepared_results['metadata_results']['submission'] = {'valid': [], 'invalid': []}
+
+            for record in request.original_data['submission']:
+                prepared_results['metadata_results']['submission']['valid'].append({
+                    'model': record,
+                    'data': record
+                })
+            print(f"Added {len(request.original_data['submission'])} submission records")
+
         credentials = {
             "username": request.webin_username,
             "password": request.webin_password,
             "mode": request.mode
         }
-        print(f"Submitting to ENA via Webin: mode={request.mode}, action={request.action}")
-        print(json.dumps(request.data))
+
+        print(f"Submitting to ENA: mode={request.mode}, action={request.action}")
+
         submitter = AnalysisSubmitter()
 
         result = submitter.submit_to_ena(
-            results=request.data,
+            results=prepared_results,
             credentials=credentials,
             action=request.action
         )
@@ -368,7 +388,7 @@ def submit_analysis(request: AnalysisSubmissionRequest):
         if result.get("success"):
             return AnalysisSubmissionResponse(
                 success=True,
-                message=result.get("message", f"Successful analyses {action_word} in ENA"),
+                message=result.get("message", f"Successful analysis {action_word} to ENA"),
                 submission_results=result.get("submission_results"),
                 errors=result.get("errors"),
                 info_messages=result.get("info_messages"),
