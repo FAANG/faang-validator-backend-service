@@ -57,7 +57,8 @@ class ValidationDataRequest(BaseModel):
 
 
 class AnalysisSubmissionRequest(BaseModel):
-    data: Dict[str, Any]
+    validation_results: Dict[str, Any]
+    original_data: Dict[str, Any]  # original json with submission sheet
     webin_username: str
     webin_password: str
     mode: str
@@ -72,7 +73,8 @@ class AnalysisSubmissionResponse(BaseModel):
     info_messages: Optional[List[str]] = None
 
 class ExperimentSubmissionRequest(BaseModel):
-    data: Dict[str, Any]
+    validation_results: Dict[str, Any]
+    original_data: Dict[str, Any]  # original json with experiment ena, run, study, submission sheets
     webin_username: str
     webin_password: str
     mode: str
@@ -85,6 +87,39 @@ class ExperimentSubmissionResponse(BaseModel):
     submission_results: Optional[str] = None
     errors: Optional[List[str]] = None
     info_messages: Optional[List[str]] = None
+
+
+def normalize_experiment_ena_record(record: dict) -> dict:
+    normalized = {}
+    for key, value in record.items():
+        if isinstance(value, list):
+            if len(value) >= 1:
+                normalized[key] = value[0]
+            else:
+                normalized[key] = ""
+        else:
+            normalized[key] = value
+    return normalized
+
+def normalize_run_record(record: dict) -> dict:
+    field_mappings = {
+        'Run center': 'Run Center',
+        'Run date': 'Run Date',
+        'Experiment Ref': 'Experiment Ref',
+        'Checksum Method': 'Checksum Method',
+        'Filename pair': 'Filename Pair',
+        'Filetype pair': 'Filetype Pair',
+        'Checksum method pair': 'Checksum Method Pair',
+        'Checksum pair': 'Checksum Pair'
+    }
+
+    normalized = {}
+    for key, value in record.items():
+        normalized_key = field_mappings.get(key, key)
+        normalized[normalized_key] = value
+
+    return normalized
+
 
 # Health check endpoint
 @app.get("/")
@@ -315,17 +350,36 @@ def submit_analysis(request: AnalysisSubmissionRequest):
                 detail="Action must be 'submission' or 'update'",
             )
 
+        print(f"Preparing analysis submission: mode={request.mode}, action={request.action}")
+
+        prepared_results = dict(request.validation_results)
+
+        # add submission records
+        if 'submission' in request.original_data:
+            if 'metadata_results' not in prepared_results:
+                prepared_results['metadata_results'] = {}
+            if 'submission' not in prepared_results['metadata_results']:
+                prepared_results['metadata_results']['submission'] = {'valid': [], 'invalid': []}
+
+            for record in request.original_data['submission']:
+                prepared_results['metadata_results']['submission']['valid'].append({
+                    'model': record,
+                    'data': record
+                })
+            print(f"Added {len(request.original_data['submission'])} submission records")
+
         credentials = {
             "username": request.webin_username,
             "password": request.webin_password,
             "mode": request.mode
         }
-        print(f"Submitting to ENA via Webin: mode={request.mode}, action={request.action}")
-        print(json.dumps(request.data))
+
+        print(f"Submitting to ENA: mode={request.mode}, action={request.action}")
+
         submitter = AnalysisSubmitter()
 
         result = submitter.submit_to_ena(
-            results=request.data,
+            results=prepared_results,
             credentials=credentials,
             action=request.action
         )
@@ -334,7 +388,7 @@ def submit_analysis(request: AnalysisSubmissionRequest):
         if result.get("success"):
             return AnalysisSubmissionResponse(
                 success=True,
-                message=result.get("message", f"Successful analyses {action_word} in ENA"),
+                message=result.get("message", f"Successful analysis {action_word} to ENA"),
                 submission_results=result.get("submission_results"),
                 errors=result.get("errors"),
                 info_messages=result.get("info_messages"),
@@ -378,6 +432,70 @@ def submit_experiment(request: ExperimentSubmissionRequest):
                 detail="Action must be 'submission' or 'update'",
             )
 
+        print(f"Preparing experiment submission: mode={request.mode}, action={request.action}")
+
+        # Prepare the results by adding ENA-specific sheets from original data
+        prepared_results = dict(request.validation_results)
+
+        # Add experiment ena records
+        if 'experiment ena' in request.original_data:
+            if 'experiment_results' not in prepared_results:
+                prepared_results['experiment_results'] = {}
+            if 'experiment ena' not in prepared_results['experiment_results']:
+                prepared_results['experiment_results']['experiment ena'] = {'valid': [], 'invalid': []}
+
+            for record in request.original_data['experiment ena']:
+                normalized_record = normalize_experiment_ena_record(record)
+                prepared_results['experiment_results']['experiment ena']['valid'].append({
+                    'model': normalized_record,
+                    'data': normalized_record
+                })
+            print(f"Added {len(request.original_data['experiment ena'])} experiment ena records")
+
+        # Add run records
+        if 'run' in request.original_data:
+            if 'metadata_results' not in prepared_results:
+                prepared_results['metadata_results'] = {}
+            if 'run' not in prepared_results['metadata_results']:
+                prepared_results['metadata_results']['run'] = {'valid': [], 'invalid': []}
+
+            for record in request.original_data['run']:
+                normalized_record = normalize_run_record(record)
+                prepared_results['metadata_results']['run']['valid'].append({
+                    'model': normalized_record,
+                    'data': normalized_record
+                })
+            print(f"Added {len(request.original_data['run'])} run records")
+
+        # Add study records
+        if 'study' in request.original_data:
+            if 'metadata_results' not in prepared_results:
+                prepared_results['metadata_results'] = {}
+            if 'study' not in prepared_results['metadata_results']:
+                prepared_results['metadata_results']['study'] = {'valid': [], 'invalid': []}
+
+            for record in request.original_data['study']:
+                prepared_results['metadata_results']['study']['valid'].append({
+                    'model': record,
+                    'data': record
+                })
+            print(f"Added {len(request.original_data['study'])} study records")
+
+        # Add submission records
+        if 'submission' in request.original_data:
+            if 'metadata_results' not in prepared_results:
+                prepared_results['metadata_results'] = {}
+            if 'submission' not in prepared_results['metadata_results']:
+                prepared_results['metadata_results']['submission'] = {'valid': [], 'invalid': []}
+
+            for record in request.original_data['submission']:
+                prepared_results['metadata_results']['submission']['valid'].append({
+                    'model': record,
+                    'data': record
+                })
+            print(f"Added {len(request.original_data['submission'])} submission records")
+
+        # Prepare credentials
         credentials = {
             "username": request.webin_username,
             "password": request.webin_password,
@@ -391,7 +509,7 @@ def submit_experiment(request: ExperimentSubmissionRequest):
 
         # Submit to ENA
         result = submitter.submit_to_ena(
-            results=request.data,
+            results=prepared_results,
             credentials=credentials,
             action=request.action
         )

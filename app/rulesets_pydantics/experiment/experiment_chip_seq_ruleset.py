@@ -23,14 +23,14 @@ class ChIPSeqExperiment(ExperimentCoreMetadata):
     chip_protocol: str = Field(..., alias="ChIP Protocol")
 
     # optional
-    # adapter_step: Optional[Literal[
-    #     "Tn5 tagmentation",
-    #     "Ligation",
-    #     "restricted access"
-    # ]] = Field(..., alias="Adapter Step")
+    adapter_step: Optional[Literal[
+        "Tn5 tagmentation",
+        "Ligation",
+        "restricted access"
+    ]] = Field(..., alias="Adapter Step")
 
     # Validators
-    @field_validator('experiment_target_term_source_id')
+    @field_validator('experiment_target_term_source_id', mode='before')
     def validate_experiment_target_term(cls, v, info):
         if v == "restricted access":
             return v
@@ -55,7 +55,7 @@ class ChIPSeqExperiment(ExperimentCoreMetadata):
         if res.errors:
             raise ValueError(f"Experiment target term invalid: {res.errors}")
 
-        return v
+        return term
 
     @field_validator('chip_protocol')
     def validate_chip_protocol_url(cls, v):
@@ -88,20 +88,20 @@ class ChIPSeqDNABindingProteinsExperiment(ChIPSeqExperiment):
     )
 
     # Validators
-    @field_validator('chip_target_term_source_id')
+    @field_validator('chip_target_term_source_id', mode='before')
     def validate_chip_target_term(cls, v, info):
         if v == "restricted access":
             return v
 
+        term = normalize_ontology_term(v)
         # term can be from CHEBI, OMIT, or NCIT
         ov = get_ontology_validator()
 
         allowed_classes = ["OMIT:0038500", "NCIT:C17804", "NCIT:C34071"]
-        if v in allowed_classes:
-            return v
+        if term in allowed_classes:
+            return term
 
         # otherwise validate as CHEBI term (subclass of CHEBI:15358 - histone)
-        term = normalize_ontology_term(v)
         if term.startswith("CHEBI:"):
             res = ov.validate_ontology_term(
                 term=term,
@@ -113,7 +113,7 @@ class ChIPSeqDNABindingProteinsExperiment(ChIPSeqExperiment):
             if res.errors:
                 raise ValueError(f"ChIP target term invalid: {res.errors}")
 
-        return v
+        return term
 
     @field_validator('library_generation_max_fragment_size_range', 'library_generation_min_fragment_size_range', mode='before')
     def validate_fragment_size(cls, v):

@@ -55,21 +55,21 @@ class OrganismValidator(BaseValidator):
         # Each object contains: text (required), ontologyTerms (optional), unit (optional)
         # The API schema validation requires a field with the same name as the characteristic key
         ontology_url = convert_term_to_url(model.organism_term_source_id)
-        
+
         organism_entry = {
             "text": model.organism,
             "organism": model.organism  # Required by API schema validation
         }
         if ontology_url:
             organism_entry["ontologyTerms"] = [ontology_url]
-        
+
         species_entry = {
             "text": model.organism,
             "species": model.organism  # Required by API schema validation
         }
         if ontology_url:
             species_entry["ontologyTerms"] = [ontology_url]
-        
+
         biosample_data["characteristics"]["organism"] = [organism_entry]
         biosample_data["characteristics"]["species"] = [species_entry]
 
