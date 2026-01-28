@@ -3,29 +3,47 @@ import subprocess
 import copy
 import re
 from typing import Dict, Any
+from lxml import etree
 
 from app.conversions.generate_analysis_and_submission_xml import get_xml_files
 from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
 
 
-def _parse_submission_results(submission_results) -> str:
+def _parse_submission_results(submission_results) -> tuple:
     try:
         if isinstance(submission_results, bytes):
             result_str = submission_results.decode('utf-8')
         else:
             result_str = str(submission_results)
 
-        # Check for success indicators in ENA response
-        if 'success="true"' in result_str or '<RECEIPT' in result_str:
-            return 'Success'
-        elif 'error' in result_str.lower() or 'ERROR' in result_str:
-            return 'Error'
+        # Check for access denied
+        if 'Access Denied' in result_str:
+            return (False, ['Access Denied'], [])
+
+        # Parse XML
+        root = etree.fromstring(submission_results)
+
+        # Extract ERROR and INFO messages (Django pattern)
+        error_messages = []
+        info_messages = []
+
+        for messages in root.findall('MESSAGES'):
+            for error in messages.findall('ERROR'):
+                if error.text:
+                    error_messages.append(error.text)
+            for info in messages.findall('INFO'):
+                if info.text:
+                    info_messages.append(info.text)
+
+        # Django logic: if there are errors, it fails
+        if len(error_messages) > 0:
+            return (False, error_messages, info_messages)
         else:
-            # Default to success if no clear error
-            return 'Success'
+            return (True, [], info_messages)
+
     except Exception as e:
         print(f"Error parsing submission results: {e}")
-        return 'Error'
+        return (False, [f"Failed to parse XML: {str(e)}"], [])
 
 
 class AnalysisSubmitter:
@@ -53,16 +71,16 @@ class AnalysisSubmitter:
 
         return get_xml_files(prepared_data, submission_id, action=action)
 
-
-    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[str, Any]:
+    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[
+        str, Any]:
         try:
             submission_id = str(uuid.uuid4())
 
             submission_path = (
-                ENA_TEST_SERVER if credentials['mode'] == 'test' 
+                ENA_TEST_SERVER if credentials['mode'] == 'test'
                 else ENA_PROD_SERVER
             )
-            
+
             print(f"Preparing analysis data for submission ID: {submission_id}")
 
             analysis_xml, submission_xml = self._prepare_analyses_data(results, submission_id, action=action)
@@ -87,7 +105,7 @@ class AnalysisSubmitter:
             username = credentials["username"]
             password = credentials["password"]
             password_escaped = re.escape(password)
-            
+
             # Submit to ENA using curl
             print(f"Submitting to ENA: {submission_path}")
             submit_to_ena_process = subprocess.run(
@@ -95,16 +113,17 @@ class AnalysisSubmitter:
                 f'-F "SUBMISSION=@{submission_xml}" '
                 f'-F "ANALYSIS=@{analysis_xml}" '
                 f'"{submission_path}"',
-                shell=True, 
+                shell=True,
                 capture_output=True
             )
 
             # parse results
             submission_results = submit_to_ena_process.stdout
-            parsed_results = _parse_submission_results(submission_results)
+            success, error_messages, info_messages = _parse_submission_results(submission_results)
             result_str = submission_results.decode('utf-8')
-            
-            print(f"Submission result: {parsed_results}")
+
+            print(f"Submission result: {'Success' if success else 'Failed'}")
+            print(submission_results.decode('utf-8'))
 
             try:
                 import os
@@ -115,19 +134,28 @@ class AnalysisSubmitter:
             except Exception as e:
                 print(f"Warning: Could not cleanup XML files: {e}")
 
-            if parsed_results == 'Success':
+            # return {
+            #     'success': True,
+            #     'message': f'XML files generated successfully (submission disabled for testing)',
+            #     'submission_results': f'Generated files:\n  - {submission_xml}\n  - {analysis_xml}\n'
+            # }
+
+            if success:
                 action_message = "updated in" if action == "update" else "submitted to"
                 return {
                     'success': True,
                     'message': f'Successfully {action_message} ENA',
-                    'submission_results': result_str
+                    'submission_results': result_str,
+                    'errors': error_messages,
+                    'info_messages': info_messages
                 }
             else:
                 return {
                     'success': False,
                     'message': 'Submission failed',
                     'submission_results': result_str,
-                    'errors': [result_str]
+                    'errors': error_messages,
+                    'info_messages': info_messages
                 }
 
         except Exception as e:
