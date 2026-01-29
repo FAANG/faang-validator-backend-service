@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, AliasChoices
 from app.validation.generic_validator_classes import BreedSpeciesValidator, get_ontology_validator
 from app.validation.validation_utils import (
     normalize_ontology_term,
@@ -24,10 +24,7 @@ class HealthStatus(BaseModel):
         if v in ["not applicable", "not collected", "not provided", "restricted access"]:
             return v
 
-        # Strip whitespace before normalizing
         v = v.strip() if isinstance(v, str) else v
-
-        # Normalize the term (convert underscore to colon)
         term = normalize_ontology_term(v)
 
         if term.startswith("EFO:"):
@@ -51,7 +48,7 @@ class HealthStatus(BaseModel):
 
 class FAANGOrganismSample(SampleCoreMetadata):
     # required fields
-    sample_name: str = Field(..., alias="Sample Name")
+    sample_name: str = Field(..., validation_alias=AliasChoices("Sample Name", "Biosample ID"))
     organism: str = Field(..., alias="Organism")
     organism_term_source_id: Union[str, Literal["restricted access"]] = Field(..., alias="Organism Term Source ID")
     sex: str = Field(..., alias="Sex")
@@ -117,7 +114,6 @@ class FAANGOrganismSample(SampleCoreMetadata):
     child_of: Optional[List[str]] = Field(None, alias="Child Of")
     pedigree: Optional[str] = Field(None,
                                     alias="Pedigree")
-    # sample_name: Optional[str] = Field(None, alias="Sample Name")
 
 
     @field_validator('sample_name')
@@ -134,7 +130,6 @@ class FAANGOrganismSample(SampleCoreMetadata):
         if not term.startswith("NCBITaxon:"):
             raise ValueError(f"Organism term '{v}' should be from NCBITaxon ontology")
 
-        # ontology validation
         ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
@@ -158,7 +153,6 @@ class FAANGOrganismSample(SampleCoreMetadata):
         if not term.startswith("PATO:"):
             raise ValueError(f"Sex term '{v}' should be from PATO ontology")
 
-        # ontology validation
         ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
@@ -182,7 +176,6 @@ class FAANGOrganismSample(SampleCoreMetadata):
         if not term.startswith("LBO:"):
             raise ValueError(f"Breed term '{v}' should be from LBO ontology")
 
-        # ontology validation
         ov = get_ontology_validator()
         res = ov.validate_ontology_term(
             term=term,
@@ -260,7 +253,6 @@ class FAANGOrganismSample(SampleCoreMetadata):
         if v is None:
             return None
 
-        # filter empty strings and None
         child_of = [item.strip() for item in v if item and item.strip()]
 
         if len(child_of) > 2:

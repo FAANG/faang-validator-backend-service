@@ -47,8 +47,10 @@ class SampleCoreMetadata(BaseModel):
     availability: Optional[str] = Field(None, alias="Availability")
     same_as: Optional[str] = Field(None, alias="Same as")
 
-    @field_validator('term_source_id')
+    @field_validator('term_source_id', mode='before')
     def validate_material_term(cls, v, info):
+        if ':' in v:
+            v = v.replace(':', '_', 1)
         values = info.data
         material = values.get('Material') or values.get('material')
 

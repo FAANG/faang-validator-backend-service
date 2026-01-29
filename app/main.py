@@ -24,6 +24,7 @@ class ValidationRequest(BaseModel):
     validate_relationships: bool = True
     validate_ontology_text: bool = True
     data_type: Literal["sample", "experiment", "analysis"]
+    action: str = "submission"
 
 
 class ValidationResponse(BaseModel):
@@ -31,7 +32,6 @@ class ValidationResponse(BaseModel):
     message: str
     results: Optional[Dict[str, Any]] = None
     report: Optional[str] = None
-
 
 
 class SubmissionRequest(BaseModel):
@@ -49,11 +49,12 @@ class SubmissionResponse(BaseModel):
     biosamples_ids: Optional[Dict[str, str]] = None
     submitted_count: Optional[int] = None
     errors: Optional[List[str]] = None
-      
-      
+
+
 class ValidationDataRequest(BaseModel):
     data: dict[str, list[dict[str, Any]]]
     data_type: Literal["sample", "experiment", "analysis"]
+    action: str = "submission"
 
 
 class AnalysisSubmissionRequest(BaseModel):
@@ -71,6 +72,7 @@ class AnalysisSubmissionResponse(BaseModel):
     submission_results: Optional[str] = None
     errors: Optional[List[str]] = None
     info_messages: Optional[List[str]] = None
+
 
 class ExperimentSubmissionRequest(BaseModel):
     validation_results: Dict[str, Any]
@@ -100,6 +102,7 @@ def normalize_experiment_ena_record(record: dict) -> dict:
         else:
             normalized[key] = value
     return normalized
+
 
 def normalize_run_record(record: dict) -> dict:
     field_mappings = {
@@ -167,16 +170,21 @@ async def prefetch_data_by_type(data: Dict[str, List[Dict[str, Any]]], data_type
     elif data_type == "analysis":
         print("Skipping pre-fetch for analysis data (no ontology terms or relationships)")
 
+
 @app.post("/validate", response_model=ValidationResponse)
 async def validate_data(request: ValidationRequest):
     try:
         await prefetch_data_by_type(request.data, request.data_type)
 
         print(f"Running validation for data_type: {request.data_type}...")
+
+        sample_action = "update" if request.data_type == "sample" and request.action == "update" else "submit"
+
         results = validator.validate_all_records(
             request.data,
             validate_relationships=request.validate_relationships,
-            validate_ontology_text=request.validate_ontology_text
+            validate_ontology_text=request.validate_ontology_text,
+            sample_action=sample_action
         )
 
         # report
@@ -210,6 +218,10 @@ async def validate_file(
         ...,
         description="Type of data in the file: 'sample', 'experiment', or 'analysis'"
     ),
+    action: str = Query(
+        default="submission",
+        description="Action type: 'submission' for new records or 'update' for existing records"
+    ),
     validate_relationships: bool = Query(
         default=True,
         description="Whether to validate cross-record relationships"
@@ -242,12 +254,15 @@ async def validate_file(
             await prefetch_data_by_type(records, data_type)
 
             print("Running validation...")
+
+            sample_action = "update" if data_type == "sample" and action == "update" else "submit"
+
             results = validator.validate_all_records(
                 records,
                 validate_relationships=True,
                 validate_ontology_text=True,
+                sample_action=sample_action
             )
-
 
             report = validator.generate_unified_report(results)
 
@@ -290,7 +305,6 @@ async def submit_to_biosamples(request: SubmissionRequest):
                 detail="Mode must be 'test' or 'prod'"
             )
 
-
         submitter = BioSampleSubmitter(validator.sample_validators)
         result = submitter.submit_to_biosamples(
             validation_results=request.validation_results,
@@ -328,7 +342,6 @@ async def submit_to_biosamples(request: SubmissionRequest):
                 "type": type(e).__name__
             }
         )
-
 
 
 @app.post("/submit-analysis", response_model=AnalysisSubmissionResponse)
@@ -550,39 +563,46 @@ def submit_experiment(request: ExperimentSubmissionRequest):
 @cprofiled(limit=25)
 @app.post("/validate-data")
 async def validate_data(request: ValidationDataRequest):
-        print("FAANG Validation")
-        print("=" * 50)
-        supported_types = validator.get_supported_types()
-        print(f"Supported sample types: {', '.join(supported_types.get('sample_types', []))}")
-        print(f"Supported experiment types: {', '.join(supported_types.get('experiment_types', []))}")
-        print(f"Supported analysis types: {', '.join(supported_types.get('analysis_types', []))}")
-        print(f"Supported metadata types: {', '.join(supported_types.get('metadata_types', []))}")
-        print()
+    print("FAANG Validation")
+    print("=" * 50)
+    supported_types = validator.get_supported_types()
+    print(f"Supported sample types: {', '.join(supported_types.get('sample_types', []))}")
+    print(f"Supported experiment types: {', '.join(supported_types.get('experiment_types', []))}")
+    print(f"Supported analysis types: {', '.join(supported_types.get('analysis_types', []))}")
+    print(f"Supported metadata types: {', '.join(supported_types.get('metadata_types', []))}")
+    print()
 
-        # Check if records is empty
-        if not request.data:
-            results = []
-        else:
-            # validation
-            await prefetch_data_by_type(request.data, request.data_type)
+    print("request: ", request)
+    # Check if records is empty
+    if not request.data:
+        results = []
+    else:
+        # validation
+        await prefetch_data_by_type(request.data, request.data_type)
 
-            print("Running validation...")
-            results = validator.validate_all_records(
-                request.data,
-                validate_relationships=True,
-                validate_ontology_text=True
-            )
+        print("Running validation...")
 
-            # report
-            report = validator.generate_unified_report(results)
-            print(report)
-            
-            return {
-                "status": "success",
-                "message": "File validated successfully",
-                "results": results,
-                "report": report
-            }
+        sample_action = "update" if request.data_type == "sample" and request.action == "update" else "submit"
+
+        print("koosum: ", sample_action, "-------->", request.action)
+
+        results = validator.validate_all_records(
+            request.data,
+            validate_relationships=True,
+            validate_ontology_text=True,
+            sample_action=sample_action
+        )
+
+        # report
+        report = validator.generate_unified_report(results)
+        print(report)
+
+        return {
+            "status": "success",
+            "message": "File validated successfully",
+            "results": results,
+            "report": report
+        }
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, AliasChoices
 from app.validation.validation_utils import (
     validate_photoperiod,
     validate_non_negative_numeric,
@@ -11,7 +11,7 @@ from app.rulesets_pydantics.sample.specimen_ruleset import FAANGSpecimenFromOrga
 
 class FAANGTeleosteiEmbryoSample(FAANGSpecimenFromOrganismSample):
     # required fields
-    sample_name: str = Field(..., alias="Sample Name")
+    sample_name: str = Field(..., validation_alias=AliasChoices("Sample Name", "Biosample ID"))
 
     origin: Literal[
         "Domesticated diploid",

@@ -1,4 +1,4 @@
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, AliasChoices
 from app.validation.validation_utils import (
     validate_photoperiod,
     validate_time_format,
@@ -15,7 +15,7 @@ from app.validation.generic_validator_classes import get_ontology_validator
 
 class FAANGTeleosteiPostHatchingSample(FAANGSpecimenFromOrganismSample):
     # required fields
-    sample_name: str = Field(..., alias="Sample Name")
+    sample_name: str = Field(..., validation_alias=AliasChoices("Sample Name", "Biosample ID"))
 
     origin: Literal[
         "Domesticated diploid",

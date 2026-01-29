@@ -136,11 +136,10 @@ class BaseValidator(ABC):
         }
 
         for i, record in enumerate(sheet_records):
-            sample_name = record.get('Sample Name', f'{sample_type}_{i}')
-
             model, errors = self.validate_single_record(record)
 
             if model and not errors['errors']:
+                sample_name = model.sample_name
                 valid_entry = {
                     'index': i,
                     'sample_name': sample_name,

@@ -685,8 +685,8 @@ class BioSampleSubmitter:
         """
         try:
             # BioSamples public API endpoint
-            # For public samples: https://www.ebi.ac.uk/biosamples/samples/{accession}
-            api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
+            # api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
+            api_url = f"https://wwwdev.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
 
             print(f"    Fetching from BioSamples API: {api_url}")
             response = requests.get(api_url, timeout=10)
@@ -823,7 +823,7 @@ class BioSampleSubmitter:
         validation_results: Dict[str, Any],
         webin_username: str,
         webin_password: str,
-        domain: str,
+        domain: Optional[str] = None,
         mode: str = 'test',
         person_data: Optional[Dict[str, Any]] = None,
         organization_data: Optional[Dict[str, Any]] = None,
@@ -863,23 +863,23 @@ class BioSampleSubmitter:
 
             if person_data:
                 person_model = person_data.get('model') if isinstance(person_data, dict) else person_data
-                if hasattr(person_model, 'person_first_name'):
+                if 'Person First Name' in person_model:
                     contact_list = [{
-                        'FirstName': person_model.person_first_name,
-                        'LastName': person_model.person_last_name,
-                        'MidInitials': getattr(person_model, 'person_initials', '') or '',
-                        'E-mail': person_model.person_email,
-                        'Role': person_model.person_role
+                        'FirstName': person_model['Person First Name'],
+                        'LastName': person_model['Person Last Name'],
+                        'MidInitials': getattr(person_model, 'Person Initials', '') or '',
+                        'E-mail': person_model['Person Email'],
+                        'Role': person_model['Person Role'],
                     }]
 
             if organization_data:
                 org_model = organization_data.get('model') if isinstance(organization_data, dict) else organization_data
-                if hasattr(org_model, 'organization_name'):
+                if 'Organization Name' in org_model:
                     organization_list = [{
-                        'Name': org_model.organization_name,
-                        'Address': org_model.organization_address,
-                        'URL': org_model.organization_uri,
-                        'Role': org_model.organization_role
+                        'Name': org_model['Organization Name'],
+                        'Address': org_model['Organization Address'],
+                        'URL': org_model['Organization URI'],
+                        'Role': org_model['Organization Role'],
                     }]
 
             submission_data = []
@@ -951,6 +951,7 @@ class BioSampleSubmitter:
             }
 
         except Exception as e:
+            print(f"Unexpected error submitting to BioSamples: {str(e)}")
             return {
                 'success': False,
                 'error': str(e),
