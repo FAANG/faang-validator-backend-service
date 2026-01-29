@@ -151,15 +151,38 @@ class CellLineValidator(BaseValidator):
                     "text": model.secondary_project
                 }]
 
+        # Auto-export any remaining fields not explicitly handled
+        excluded_fields = {
+            'sample_name', 'material', 'term_source_id', 'organism', 'organism_term_source_id',
+            'sex', 'sex_term_source_id', 'cell_line', 'biomaterial_provider', 'catalogue_number',
+            'number_of_passages', 'date_established', 'date_established_unit', 'publication',
+            'breed', 'breed_term_source_id', 'cell_type', 'culture_conditions', 'culture_protocol',
+            'disease', 'disease_term_source_id', 'karyotype', 'project', 'secondary_project',
+            'sample_description', 'availability', 'derived_from', 'same_as'
+        }
 
-        # # Relationships - derived from (optional)
-        # if model.derived_from:
-        #     biosample_data["relationships"] = [{
-        #         "type": "derived from",
-        #         "target": model.derived_from[0]
-        #     }]
-        #
-        # return biosample_data
+        for field_name, field_value in model.model_dump().items():
+            if field_value is None or (isinstance(field_value, str) and not field_value.strip()):
+                continue
+            if field_name in excluded_fields:
+                continue
+            if field_name.endswith('_term_source_id') or field_name.endswith('_unit'):
+                continue
+            if field_name in {'child_of', 'derived_from', 'same_as'}:
+                continue
+
+            char_name = field_name.replace('_', ' ')
+            if char_name in biosample_data["characteristics"]:
+                continue
+
+            if isinstance(field_value, list):
+                if all(isinstance(item, str) for item in field_value):
+                    biosample_data["characteristics"][char_name] = [
+                        {"text": item} for item in field_value if item and item.strip()
+                    ]
+                continue
+
+            biosample_data["characteristics"][char_name] = [{"text": str(field_value)}]
 
         # Build relationships list
         relationships = []

@@ -240,7 +240,51 @@ class TeleosteiPostHatchingValidator(BaseValidator):
                     "text": model.secondary_project
                 }]
 
+        # Auto-export any remaining fields not explicitly handled
+        excluded_fields = {
+            'sample_name', 'material', 'term_source_id', 'specimen_collection_date',
+            'specimen_collection_date_unit',
+            'geographic_location', 'animal_age_at_collection', 'animal_age_at_collection_unit',
+            'developmental_stage', 'developmental_stage_term_source_id', 'organism_part',
+            'organism_part_term_source_id',
+            'specimen_collection_protocol', 'health_status', 'origin', 'reproductive_strategy', 'gonad_type',
+            'hatching', 'maturity_state', 'maturity_state_term_source_id', 'time_post_fertilisation',
+            'time_post_fertilisation_unit', 'post_hatching_animal_density', 'post_hatching_animal_density_unit',
+            'food_restriction', 'food_restriction_unit', 'post_hatching_water_temperature_average',
+            'post_hatching_water_temperature_average_unit', 'average_water_salinity',
+            'average_water_salinity_unit',
+            'photoperiod', 'sampling_weight', 'sampling_weight_unit', 'method_of_euthanasia',
+            'generations_from_wild',
+            'generations_from_wild_unit', 'diet', 'experimental_strain_id', 'genetic_background',
+            'water_rearing_system',
+            'standard_length', 'standard_length_unit', 'total_length', 'total_length_unit', 'fork_length',
+            'fork_length_unit', 'average_water_oxygen', 'average_water_oxygen_unit', 'sampling_day_start_time',
+            'sampling_day_end_time', 'anaesthetic_or_sedative_name', 'project', 'secondary_project',
+            'sample_description', 'availability', 'derived_from', 'same_as'
+        }
 
+        for field_name, field_value in model.model_dump().items():
+            if field_value is None or (isinstance(field_value, str) and not field_value.strip()):
+                continue
+            if field_name in excluded_fields:
+                continue
+            if field_name.endswith('_term_source_id') or field_name.endswith('_unit'):
+                continue
+            if field_name in {'child_of', 'derived_from', 'same_as'}:
+                continue
+
+            char_name = field_name.replace('_', ' ')
+            if char_name in biosample_data["characteristics"]:
+                continue
+
+            if isinstance(field_value, list):
+                if all(isinstance(item, str) for item in field_value):
+                    biosample_data["characteristics"][char_name] = [
+                        {"text": item} for item in field_value if item and item.strip()
+                    ]
+                continue
+
+            biosample_data["characteristics"][char_name] = [{"text": str(field_value)}]
 
         # Build relationships list
         relationships = []
