@@ -152,11 +152,34 @@ class CellLineValidator(BaseValidator):
                 }]
 
 
-        # Relationships - derived from (optional)
+        # # Relationships - derived from (optional)
+        # if model.derived_from:
+        #     biosample_data["relationships"] = [{
+        #         "type": "derived from",
+        #         "target": model.derived_from[0]
+        #     }]
+        #
+        # return biosample_data
+
+        # Build relationships list
+        relationships = []
+
+        # Same as relationship
+        if hasattr(model, 'same_as') and model.same_as and model.same_as.strip():
+            relationships.append({
+                "type": "same as",
+                "target": model.same_as
+            })
+
+        # Derived from relationship (optional for cell line)
         if model.derived_from:
-            biosample_data["relationships"] = [{
+            relationships.append({
                 "type": "derived from",
                 "target": model.derived_from[0]
-            }]
+            })
+
+        # Add relationships to biosample_data if any exist
+        if relationships:
+            biosample_data["relationships"] = relationships
 
         return biosample_data

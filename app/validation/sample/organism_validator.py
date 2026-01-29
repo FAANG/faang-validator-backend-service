@@ -132,15 +132,27 @@ class OrganismValidator(BaseValidator):
                 }]
 
 
+
+        relationships = []
+
+        # Same as relationship
+        if hasattr(model, 'same_as') and model.same_as and model.same_as.strip():
+            relationships.append({
+                "type": "same as",
+                "target": model.same_as
+            })
+
+        # Child of relationships
         if model.child_of:
-            rels = []
             for parent in model.child_of:
                 if parent and parent.strip():
-                    rels.append({
+                    relationships.append({
                         "type": "child of",
                         "target": parent
                     })
-            if rels:
-                biosample_data["relationships"] = rels
+
+        # Add relationships to biosample_data if any exist
+        if relationships:
+            biosample_data["relationships"] = relationships
 
         return biosample_data

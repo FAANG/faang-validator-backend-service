@@ -178,10 +178,26 @@ class TeleosteiEmbryoValidator(BaseValidator):
                 "unit": model.generations_from_wild_unit or ""
             }]
 
-        # Relationships - derived from
-        biosample_data["relationships"] = [{
-            "type": "derived from",
-            "target": model.derived_from[0]
-        }]
+
+        # Build relationships list
+        relationships = []
+
+        # Same as relationship
+        if hasattr(model, 'same_as') and model.same_as and model.same_as.strip():
+            relationships.append({
+                "type": "same as",
+                "target": model.same_as
+            })
+
+        # Derived from relationship
+        if hasattr(model, 'derived_from') and model.derived_from:
+            relationships.append({
+                "type": "derived from",
+                "target": model.derived_from[0]
+            })
+
+        # Add relationships to biosample_data if any exist
+        if relationships:
+            biosample_data["relationships"] = relationships
 
         return biosample_data

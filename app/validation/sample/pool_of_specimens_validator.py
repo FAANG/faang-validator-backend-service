@@ -107,12 +107,27 @@ class PoolOfSpecimensValidator(BaseValidator):
                 }]
 
 
-        # Relationships - derived from (multiple specimens)
-        biosample_data["relationships"] = []
-        for specimen in model.derived_from:
-            biosample_data["relationships"].append({
-                "type": "derived from",
-                "target": specimen
+
+        # Build relationships list
+        relationships = []
+
+        # Same as relationship
+        if hasattr(model, 'same_as') and model.same_as and model.same_as.strip():
+            relationships.append({
+                "type": "same as",
+                "target": model.same_as
             })
+
+        # Derived from relationships (multiple specimens)
+        if hasattr(model, 'derived_from') and model.derived_from:
+            for specimen in model.derived_from:
+                relationships.append({
+                    "type": "derived from",
+                    "target": specimen
+                })
+
+        # Add relationships to biosample_data if any exist
+        if relationships:
+            biosample_data["relationships"] = relationships
 
         return biosample_data
