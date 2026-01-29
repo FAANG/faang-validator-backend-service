@@ -40,6 +40,20 @@ class OrganoidValidator(BaseValidator):
             "ontologyTerms": [convert_term_to_url("NCIT:C172259")]
         }]
 
+        biosample_data["characteristics"]["sample name"] = [{
+            "text": model.sample_name
+        }]
+
+        if hasattr(model, 'sample_description') and model.sample_description:
+            biosample_data["characteristics"]["sample description"] = [{
+                "text": model.sample_description
+            }]
+
+        if hasattr(model, 'availability') and model.availability:
+            biosample_data["characteristics"]["availability"] = [{
+                "text": model.availability
+            }]
+
         # Organ model
         biosample_data["characteristics"]["organ model"] = [{
             "text": model.organ_model,
@@ -93,6 +107,24 @@ class OrganoidValidator(BaseValidator):
                 "text": str(model.number_of_frozen_cells),
                 "unit": model.number_of_frozen_cells_unit or "organoids"
             }]
+
+        if hasattr(model, 'project') and model.project:
+            biosample_data["characteristics"]["project"] = [{
+                "text": model.project
+            }]
+
+        if hasattr(model, 'secondary_project') and model.secondary_project:
+            if isinstance(model.secondary_project, list):
+                secondary_values = [val for val in model.secondary_project if val and val.strip()]
+                if secondary_values:
+                    biosample_data["characteristics"]["secondary project"] = [
+                        {"text": val} for val in secondary_values
+                    ]
+            elif model.secondary_project.strip():
+                biosample_data["characteristics"]["secondary project"] = [{
+                    "text": model.secondary_project
+                }]
+
 
         # Relationships - derived from
         biosample_data["relationships"] = [{

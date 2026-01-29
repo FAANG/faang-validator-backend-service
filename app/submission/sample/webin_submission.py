@@ -194,7 +194,7 @@ class WebinBioSamplesSubmission:
                 updated_biosample_entry['organization'] = tmp['organization']
                 updated_biosample_entry['contact'] = tmp['contact']
                 updated_biosample_entry['update'] = tmp['update']
-                # updated_biosample_entry['relationships'] = tmp['relationships']
+                updated_biosample_entry['relationships'] = tmp['relationships']
                 updated_json = json.dumps(updated_biosample_entry)
 
                 update_submission_response = requests.put(
