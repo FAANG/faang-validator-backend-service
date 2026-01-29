@@ -212,10 +212,21 @@ def strip_and_convert_empty_to_none(v: Any) -> Any:
 
 
 def validate_sample_name(v: Any) -> str:
-    if not v or v.strip() == "":
+    if not v or (isinstance(v, str) and v.strip() == ""):
         raise ValueError("Sample Name is required and cannot be empty")
-    return v.strip()
 
+    v = v.strip()
+
+    if v.startswith("SAM"):
+        # pattern: SAM + [E/D/N] + optional [A/G] + digits
+        if not re.match(r'^SAM[AED][AG]?\d+$', v):
+            raise ValueError(
+                f"Invalid BioSample ID format: '{v}'. "
+                f"Expected format: SAM[E/D/N][A/G optional][numbers] "
+                f"(e.g., SAMEA123456, SAMN01234567)"
+            )
+
+    return v
 
 def validate_required_field(v: Any, field_name: str) -> str:
     if not v or (isinstance(v, str) and v.strip() == ""):

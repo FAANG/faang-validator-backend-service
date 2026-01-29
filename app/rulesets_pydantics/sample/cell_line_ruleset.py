@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, AliasChoices
 from app.validation.generic_validator_classes import get_ontology_validator
 from app.validation.validation_utils import (
     normalize_ontology_term,
@@ -50,7 +50,7 @@ class CellType(BaseModel):
 
 class FAANGCellLineSample(SampleCoreMetadata):
     # required fields
-    sample_name: str = Field(..., alias="Sample Name")
+    sample_name: str = Field(..., validation_alias=AliasChoices("Sample Name", "Biosample ID"))
 
     organism: str = Field(..., alias="Organism")
     organism_term_source_id: Union[str, Literal["restricted access"]] = Field(

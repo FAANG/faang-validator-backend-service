@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, AliasChoices
 from app.validation.generic_validator_classes import get_ontology_validator
 from app.validation.validation_utils import (
     normalize_ontology_term,
@@ -42,7 +42,7 @@ class CellType(BaseModel):
 
 class FAANGCellSpecimenSample(SampleCoreMetadata):
     # required fields
-    sample_name: str = Field(..., alias="Sample Name")
+    sample_name: str = Field(..., validation_alias=AliasChoices("Sample Name", "Biosample ID"))
 
     cell_type: List[CellType] = Field(..., alias="Cell Type")
 

@@ -150,8 +150,6 @@ class WebinBioSamplesSubmission:
             return None
 
     def update_records(self) -> Dict[str, str]:
-        if self.domain_name is None:
-            return {'Error': 'Error: domain name was not specified'}
 
         updated_biosamples_ids = dict()
 
@@ -164,7 +162,6 @@ class WebinBioSamplesSubmission:
                 else:
                     tmp[key] = value
 
-            tmp['domain'] = self.domain_name
             tmp['update'] = str(datetime.now().isoformat())
             accession = tmp['accession']
 
@@ -173,7 +170,7 @@ class WebinBioSamplesSubmission:
 
             if existing_biosample_entry:
                 updated_biosample_entry = copy.deepcopy(existing_biosample_entry)
-                tmp['characteristics']['sample name'] = existing_biosample_entry['characteristics']['sample name']
+                # tmp['characteristics']['sample name'] = existing_biosample_entry['characteristics']['sample name']
 
                 if 'derived from' in tmp['characteristics']:
                     # replace with sample name it is derived from
@@ -197,7 +194,7 @@ class WebinBioSamplesSubmission:
                 updated_biosample_entry['organization'] = tmp['organization']
                 updated_biosample_entry['contact'] = tmp['contact']
                 updated_biosample_entry['update'] = tmp['update']
-                updated_biosample_entry['relationships'] = tmp['relationships']
+                # updated_biosample_entry['relationships'] = tmp['relationships']
                 updated_json = json.dumps(updated_biosample_entry)
 
                 update_submission_response = requests.put(

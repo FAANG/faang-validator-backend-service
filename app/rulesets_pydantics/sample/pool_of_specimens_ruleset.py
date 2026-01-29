@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, AliasChoices
 from app.validation.validation_utils import (
     validate_sample_name,
     validate_date_format,
@@ -13,7 +13,7 @@ from .standard_ruleset import SampleCoreMetadata
 
 class FAANGPoolOfSpecimensSample(SampleCoreMetadata):
     # required fields
-    sample_name: str = Field(..., alias="Sample Name")
+    sample_name: str = Field(..., validation_alias=AliasChoices("Sample Name", "Biosample ID"))
 
     pool_creation_date: Union[str, Literal["restricted access"]] = Field(
         ..., alias="Pool Creation Date"
