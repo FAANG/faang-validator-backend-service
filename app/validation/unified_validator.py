@@ -292,23 +292,23 @@ class UnifiedFAANGValidator:
         has_experiments = any(k in self.supported_experiment_types for k in data.keys())
 
         if has_samples:
-            if sample_action == 'update':
-                print("Checking BioSample ID format...")
-                valid_ids, invalid_ids = validate_biosample_ids_batch(data, sample_action)
+            print(f"Validating headers and BioSample IDs... {sample_action}")
+            valid_ids, invalid_ids = validate_biosample_ids_batch(data, sample_action)
 
-                if invalid_ids:
-                    return {
-                        'status': 'error',
-                        'error_type': 'invalid_biosample_ids',
-                        'message': f'Invalid BioSample IDs detected. Please correct the following IDs before proceeding with validation.',
-                        'invalid_ids': invalid_ids,
-                        'valid_ids': valid_ids,
-                        'sample_types_processed': [],
-                        'metadata_types_processed': [],
-                        'analysis_types_processed': [],
-                        'experiment_types_processed': []
-                    }
-                print(f"✓ All BioSample IDs are valid ({len(valid_ids)} IDs checked)")
+            if invalid_ids:
+                return {
+                    'status': 'error',
+                    'error_type': 'invalid_biosample_ids',
+                    'message': f'Invalid BioSample IDs or headers detected. Please make correction before proceeding with validation.',
+                    'invalid_ids': invalid_ids,
+                    'valid_ids': valid_ids,
+                    'sample_types_processed': [],
+                    'metadata_types_processed': [],
+                    'analysis_types_processed': [],
+                    'experiment_types_processed': []
+                }
+            print(f"✓ All BioSample IDs are valid ({len(valid_ids)} IDs checked)")
+
 
             print("Sample types in data:", [k for k in data.keys() if k in self.supported_sample_types])
             for sample_type, samples in data.items():
