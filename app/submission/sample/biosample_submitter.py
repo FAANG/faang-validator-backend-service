@@ -212,7 +212,7 @@ class BioSampleSubmitter:
     def __init__(self, sample_validators: Dict[str, Any]):
         self.sample_validators = sample_validators
 
-    def export_valid_samples_to_biosample(self, validation_results: Dict[str, Any]) -> Dict[str, List[Dict]]:
+    def export_valid_samples_to_biosample(self, validation_results: Dict[str, Any], mode) -> Dict[str, List[Dict]]:
         biosample_exports = {}
 
         sample_types = validation_results.get('sample_types_processed', []) or []
@@ -362,6 +362,7 @@ class BioSampleSubmitter:
                 sample_results,
                 organism_samples,
                 biosample_exports,
+                mode,
                 set()  # Use fresh visited set for recursive call
             )
 
@@ -471,7 +472,8 @@ class BioSampleSubmitter:
                                     parent_name,
                                     sample_results,
                                     organism_samples,
-                                    biosample_exports
+                                    biosample_exports,
+                                    mode
                                 )
 
                                 if parent_biosample_data and 'organism' in parent_biosample_data.get('characteristics',
@@ -504,7 +506,8 @@ class BioSampleSubmitter:
         results_by_type: Dict[str, Any],
         organism_samples: Dict[str, Any],
         biosample_exports: Dict[str, List[Dict]],
-        visited: set = None
+        mode,
+        visited: set = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Recursively fetch organism information for a parent ID following the derived_from chain.
@@ -651,6 +654,7 @@ class BioSampleSubmitter:
                                 results_by_type,
                                 organism_samples,
                                 biosample_exports,
+                                mode,
                                 visited
                             )
                             if result:
@@ -660,7 +664,7 @@ class BioSampleSubmitter:
         # Step 4: Check if parent_id is a BioSamples ID (starts with "SAM")
         if parent_id.startswith("SAM"):
             print(f"    '{parent_id}' appears to be a BioSamples ID (starts with SAM)")
-            biosample_data = self._fetch_from_biosamples_api(parent_id)
+            biosample_data = self._fetch_from_biosamples_api(parent_id, mode)
             if biosample_data and 'organism' in biosample_data.get('characteristics', {}):
                 return {
                     'characteristics': {
@@ -673,7 +677,7 @@ class BioSampleSubmitter:
         print(f"    Could not find organism for '{parent_id}'")
         return None
 
-    def _fetch_from_biosamples_api(self, biosample_id: str) -> Optional[Dict[str, Any]]:
+    def _fetch_from_biosamples_api(self, biosample_id: str, mode) -> Optional[Dict[str, Any]]:
         """
         Fetch biosample data from the public BioSamples API.
 
@@ -686,7 +690,10 @@ class BioSampleSubmitter:
         try:
             # BioSamples public API endpoint
             # api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
-            api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
+            if mode == 'test':
+                api_url = f"https://wwwdev.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
+            else:
+                api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
 
             print(f"    Fetching from BioSamples API: {api_url}")
             response = requests.get(api_url, timeout=10)
@@ -837,7 +844,7 @@ class BioSampleSubmitter:
             print(f"Valid samples: {valid_samples}")
             print(f"Invalid samples: {invalid_samples}")
 
-            biosample_exports = self.export_valid_samples_to_biosample(validation_results)
+            biosample_exports = self.export_valid_samples_to_biosample(validation_results, mode)
 
             if not biosample_exports:
                 return {
