@@ -51,6 +51,20 @@ class OrganismValidator(BaseValidator):
             "ontologyTerms": [convert_term_to_url(model.term_source_id)]
         }]
 
+        biosample_data["characteristics"]["sample name"] = [{
+            "text": model.sample_name
+        }]
+
+        if hasattr(model, 'sample_description') and model.sample_description:
+            biosample_data["characteristics"]["sample description"] = [{
+                "text": model.sample_description
+            }]
+
+        if hasattr(model, 'availability') and model.availability:
+            biosample_data["characteristics"]["availability"] = [{
+                "text": model.availability
+            }]
+
         # BioSamples API expects organism and species as arrays of objects
         # Each object contains: text (required), ontologyTerms (optional), unit (optional)
         # The API schema validation requires a field with the same name as the characteristic key
@@ -100,15 +114,79 @@ class OrganismValidator(BaseValidator):
             if hs_list:
                 biosample_data["characteristics"]["health status"] = hs_list
 
+        if hasattr(model, 'project') and model.project:
+            biosample_data["characteristics"]["project"] = [{
+                "text": model.project
+            }]
+
+        if hasattr(model, 'secondary_project') and model.secondary_project:
+            if isinstance(model.secondary_project, list):
+                secondary_values = [val for val in model.secondary_project if val and val.strip()]
+                if secondary_values:
+                    biosample_data["characteristics"]["secondary project"] = [
+                        {"text": val} for val in secondary_values
+                    ]
+            elif model.secondary_project.strip():
+                biosample_data["characteristics"]["secondary project"] = [{
+                    "text": model.secondary_project
+                }]
+
+
+
+
+
+        # Auto-export any remaining fields not explicitly handled
+        excluded_fields = {
+            'sample_name', 'material', 'term_source_id', 'organism', 'organism_term_source_id',
+            'sex', 'sex_term_source_id', 'birth_date', 'birth_date_unit', 'breed',
+            'breed_term_source_id', 'health_status', 'project', 'secondary_project',
+            'sample_description', 'availability', 'child_of', 'same_as', 'derived_from'
+        }
+
+        for field_name, field_value in model.model_dump().items():
+            if field_value is None or (isinstance(field_value, str) and not field_value.strip()):
+                continue
+            if field_name in excluded_fields:
+                continue
+            if field_name.endswith('_term_source_id') or field_name.endswith('_unit'):
+                continue
+            if field_name in {'child_of', 'derived_from', 'same_as'}:
+                continue
+
+            char_name = field_name.replace('_', ' ')
+            if char_name in biosample_data["characteristics"]:
+                continue
+
+            if isinstance(field_value, list):
+                if all(isinstance(item, str) for item in field_value):
+                    biosample_data["characteristics"][char_name] = [
+                        {"text": item} for item in field_value if item and item.strip()
+                    ]
+                continue
+
+            biosample_data["characteristics"][char_name] = [{"text": str(field_value)}]
+
+
+        relationships = []
+
+        # Same as relationship
+        if hasattr(model, 'same_as') and model.same_as and model.same_as.strip():
+            relationships.append({
+                "type": "same as",
+                "target": model.same_as
+            })
+
+        # Child of relationships
         if model.child_of:
-            rels = []
             for parent in model.child_of:
                 if parent and parent.strip():
-                    rels.append({
+                    relationships.append({
                         "type": "child of",
                         "target": parent
                     })
-            if rels:
-                biosample_data["relationships"] = rels
+
+        # Add relationships to biosample_data if any exist
+        if relationships:
+            biosample_data["relationships"] = relationships
 
         return biosample_data

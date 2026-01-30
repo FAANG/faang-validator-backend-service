@@ -40,6 +40,20 @@ class SpecimenValidator(BaseValidator):
             "ontologyTerms": [convert_term_to_url(model.term_source_id)]
         }]
 
+        biosample_data["characteristics"]["sample name"] = [{
+            "text": model.sample_name
+        }]
+
+        if hasattr(model, 'sample_description') and model.sample_description:
+            biosample_data["characteristics"]["sample description"] = [{
+                "text": model.sample_description
+            }]
+
+        if hasattr(model, 'availability') and model.availability:
+            biosample_data["characteristics"]["availability"] = [{
+                "text": model.availability
+            }]
+
         # Specimen collection date
         biosample_data["characteristics"]["specimen collection date"] = [{
             "text": model.specimen_collection_date,
@@ -142,10 +156,82 @@ class SpecimenValidator(BaseValidator):
                 "unit": model.embryonic_stage_unit
             }]
 
-        # Relationships - derived from
-        biosample_data["relationships"] = [{
-            "type": "derived from",
-            "target": model.derived_from[0]
-        }]
+
+        if hasattr(model, 'project') and model.project:
+            biosample_data["characteristics"]["project"] = [{
+                "text": model.project
+            }]
+
+        if hasattr(model, 'secondary_project') and model.secondary_project:
+            if isinstance(model.secondary_project, list):
+                secondary_values = [val for val in model.secondary_project if val and val.strip()]
+                if secondary_values:
+                    biosample_data["characteristics"]["secondary project"] = [
+                        {"text": val} for val in secondary_values
+                    ]
+            elif model.secondary_project.strip():
+                biosample_data["characteristics"]["secondary project"] = [{
+                    "text": model.secondary_project
+                }]
+
+        # Auto-export any remaining fields not explicitly handled
+        excluded_fields = {
+            'sample_name', 'material', 'term_source_id', 'specimen_collection_date',
+            'specimen_collection_date_unit', 'geographic_location', 'animal_age_at_collection',
+            'animal_age_at_collection_unit', 'developmental_stage', 'developmental_stage_term_source_id',
+            'organism_part', 'organism_part_term_source_id', 'specimen_collection_protocol',
+            'health_status', 'fasted_status', 'number_of_pieces', 'number_of_pieces_unit',
+            'specimen_volume', 'specimen_volume_unit', 'specimen_size', 'specimen_size_unit',
+            'specimen_weight', 'specimen_weight_unit', 'specimen_picture_url',
+            'gestational_age_at_sample_collection', 'gestational_age_at_sample_collection_unit',
+            'average_incubation_temperature', 'average_incubation_temperature_unit',
+            'average_incubation_humidity', 'average_incubation_humidity_unit',
+            'embryonic_stage', 'embryonic_stage_unit', 'project', 'secondary_project',
+            'sample_description', 'availability', 'derived_from', 'same_as'
+        }
+
+        for field_name, field_value in model.model_dump().items():
+            if field_value is None or (isinstance(field_value, str) and not field_value.strip()):
+                continue
+            if field_name in excluded_fields:
+                continue
+            if field_name.endswith('_term_source_id') or field_name.endswith('_unit'):
+                continue
+            if field_name in {'child_of', 'derived_from', 'same_as'}:
+                continue
+
+            char_name = field_name.replace('_', ' ')
+            if char_name in biosample_data["characteristics"]:
+                continue
+
+            if isinstance(field_value, list):
+                if all(isinstance(item, str) for item in field_value):
+                    biosample_data["characteristics"][char_name] = [
+                        {"text": item} for item in field_value if item and item.strip()
+                    ]
+                continue
+
+            biosample_data["characteristics"][char_name] = [{"text": str(field_value)}]
+
+        # Build relationships list
+        relationships = []
+
+        # Same as relationship
+        if hasattr(model, 'same_as') and model.same_as and model.same_as.strip():
+            relationships.append({
+                "type": "same as",
+                "target": model.same_as
+            })
+
+        # Derived from relationship
+        if hasattr(model, 'derived_from') and model.derived_from:
+            relationships.append({
+                "type": "derived from",
+                "target": model.derived_from[0]
+            })
+
+        # Add relationships to biosample_data if any exist
+        if relationships:
+            biosample_data["relationships"] = relationships
 
         return biosample_data

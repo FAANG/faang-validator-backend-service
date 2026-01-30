@@ -232,3 +232,44 @@ def validate_required_field(v: Any, field_name: str) -> str:
     if not v or (isinstance(v, str) and v.strip() == ""):
         raise ValueError(f"{field_name} is required and cannot be empty")
     return v.strip() if isinstance(v, str) else v
+
+
+def auto_export_remaining_fields(
+    model,
+    biosample_data: dict,
+    excluded_fields: set
+) -> None:
+    for field_name, field_value in model.model_dump().items():
+
+        if field_value is None or (isinstance(field_value, str) and not field_value.strip()):
+            continue
+
+        if field_name in excluded_fields:
+            continue
+
+        if field_name.endswith('_term_source_id') or field_name.endswith('_unit'):
+            continue
+
+        # Skip relationship fields
+        if field_name in {'child_of', 'derived_from', 'same_as'}:
+            continue
+
+        # Convert field name to characteristic format (birth_location -> birth location)
+        char_name = field_name.replace('_', ' ')
+
+        # Skip if already in characteristics
+        if char_name in biosample_data["characteristics"]:
+            continue
+
+        # Handle list values
+        if isinstance(field_value, list):
+            if all(isinstance(item, str) for item in field_value):
+                biosample_data["characteristics"][char_name] = [
+                    {"text": item} for item in field_value if item and item.strip()
+                ]
+            continue
+
+        # Handle simple values
+        biosample_data["characteristics"][char_name] = [{
+            "text": str(field_value)
+        }]

@@ -40,6 +40,20 @@ class TeleosteiEmbryoValidator(BaseValidator):
             "ontologyTerms": [convert_term_to_url(model.term_source_id)]
         }]
 
+        biosample_data["characteristics"]["sample name"] = [{
+            "text": model.sample_name
+        }]
+
+        if hasattr(model, 'sample_description') and model.sample_description:
+            biosample_data["characteristics"]["sample description"] = [{
+                "text": model.sample_description
+            }]
+
+        if hasattr(model, 'availability') and model.availability:
+            biosample_data["characteristics"]["availability"] = [{
+                "text": model.availability
+            }]
+
         # Specimen collection date
         biosample_data["characteristics"]["specimen collection date"] = [{
             "text": model.specimen_collection_date,
@@ -139,6 +153,24 @@ class TeleosteiEmbryoValidator(BaseValidator):
             "text": model.photoperiod
         }]
 
+        if hasattr(model, 'project') and model.project:
+            biosample_data["characteristics"]["project"] = [{
+                "text": model.project
+            }]
+
+        if hasattr(model, 'secondary_project') and model.secondary_project:
+            if isinstance(model.secondary_project, list):
+                secondary_values = [val for val in model.secondary_project if val and val.strip()]
+                if secondary_values:
+                    biosample_data["characteristics"]["secondary project"] = [
+                        {"text": val} for val in secondary_values
+                    ]
+            elif model.secondary_project.strip():
+                biosample_data["characteristics"]["secondary project"] = [{
+                    "text": model.secondary_project
+                }]
+
+
         # Optional field
         if model.generations_from_wild is not None:
             biosample_data["characteristics"]["generations from wild"] = [{
@@ -146,10 +178,65 @@ class TeleosteiEmbryoValidator(BaseValidator):
                 "unit": model.generations_from_wild_unit or ""
             }]
 
-        # Relationships - derived from
-        biosample_data["relationships"] = [{
-            "type": "derived from",
-            "target": model.derived_from[0]
-        }]
+        # Auto-export any remaining fields not explicitly handled
+        excluded_fields = {
+            'sample_name', 'material', 'term_source_id', 'specimen_collection_date',
+            'specimen_collection_date_unit',
+            'geographic_location', 'animal_age_at_collection', 'animal_age_at_collection_unit',
+            'developmental_stage', 'developmental_stage_term_source_id', 'organism_part',
+            'organism_part_term_source_id',
+            'specimen_collection_protocol', 'health_status', 'origin', 'reproductive_strategy', 'hatching',
+            'time_post_fertilisation', 'time_post_fertilisation_unit', 'pre_hatching_water_temperature_average',
+            'pre_hatching_water_temperature_average_unit', 'post_hatching_water_temperature_average',
+            'post_hatching_water_temperature_average_unit', 'degree_days', 'degree_days_unit', 'growth_media',
+            'medium_replacement_frequency', 'medium_replacement_frequency_unit', 'percentage_total_somite_number',
+            'percentage_total_somite_number_unit', 'average_water_salinity', 'average_water_salinity_unit',
+            'photoperiod', 'generations_from_wild', 'generations_from_wild_unit', 'project', 'secondary_project',
+            'sample_description', 'availability', 'derived_from', 'same_as'
+        }
+
+        for field_name, field_value in model.model_dump().items():
+            if field_value is None or (isinstance(field_value, str) and not field_value.strip()):
+                continue
+            if field_name in excluded_fields:
+                continue
+            if field_name.endswith('_term_source_id') or field_name.endswith('_unit'):
+                continue
+            if field_name in {'child_of', 'derived_from', 'same_as'}:
+                continue
+
+            char_name = field_name.replace('_', ' ')
+            if char_name in biosample_data["characteristics"]:
+                continue
+
+            if isinstance(field_value, list):
+                if all(isinstance(item, str) for item in field_value):
+                    biosample_data["characteristics"][char_name] = [
+                        {"text": item} for item in field_value if item and item.strip()
+                    ]
+                continue
+
+            biosample_data["characteristics"][char_name] = [{"text": str(field_value)}]
+
+        # Build relationships list
+        relationships = []
+
+        # Same as relationship
+        if hasattr(model, 'same_as') and model.same_as and model.same_as.strip():
+            relationships.append({
+                "type": "same as",
+                "target": model.same_as
+            })
+
+        # Derived from relationship
+        if hasattr(model, 'derived_from') and model.derived_from:
+            relationships.append({
+                "type": "derived from",
+                "target": model.derived_from[0]
+            })
+
+        # Add relationships to biosample_data if any exist
+        if relationships:
+            biosample_data["relationships"] = relationships
 
         return biosample_data

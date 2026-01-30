@@ -40,6 +40,20 @@ class CellLineValidator(BaseValidator):
             "ontologyTerms": [convert_term_to_url(model.term_source_id)]
         }]
 
+        biosample_data["characteristics"]["sample name"] = [{
+            "text": model.sample_name
+        }]
+
+        if hasattr(model, 'sample_description') and model.sample_description:
+            biosample_data["characteristics"]["sample description"] = [{
+                "text": model.sample_description
+            }]
+
+        if hasattr(model, 'availability') and model.availability:
+            biosample_data["characteristics"]["availability"] = [{
+                "text": model.availability
+            }]
+
         # Organism
         biosample_data["characteristics"]["organism"] = [{
             "text": model.organism,
@@ -120,11 +134,75 @@ class CellLineValidator(BaseValidator):
                 "text": model.karyotype
             }]
 
-        # Relationships - derived from (optional)
+        if hasattr(model, 'project') and model.project:
+            biosample_data["characteristics"]["project"] = [{
+                "text": model.project
+            }]
+
+        if hasattr(model, 'secondary_project') and model.secondary_project:
+            if isinstance(model.secondary_project, list):
+                secondary_values = [val for val in model.secondary_project if val and val.strip()]
+                if secondary_values:
+                    biosample_data["characteristics"]["secondary project"] = [
+                        {"text": val} for val in secondary_values
+                    ]
+            elif model.secondary_project.strip():
+                biosample_data["characteristics"]["secondary project"] = [{
+                    "text": model.secondary_project
+                }]
+
+        # Auto-export any remaining fields not explicitly handled
+        excluded_fields = {
+            'sample_name', 'material', 'term_source_id', 'organism', 'organism_term_source_id',
+            'sex', 'sex_term_source_id', 'cell_line', 'biomaterial_provider', 'catalogue_number',
+            'number_of_passages', 'date_established', 'date_established_unit', 'publication',
+            'breed', 'breed_term_source_id', 'cell_type', 'culture_conditions', 'culture_protocol',
+            'disease', 'disease_term_source_id', 'karyotype', 'project', 'secondary_project',
+            'sample_description', 'availability', 'derived_from', 'same_as'
+        }
+
+        for field_name, field_value in model.model_dump().items():
+            if field_value is None or (isinstance(field_value, str) and not field_value.strip()):
+                continue
+            if field_name in excluded_fields:
+                continue
+            if field_name.endswith('_term_source_id') or field_name.endswith('_unit'):
+                continue
+            if field_name in {'child_of', 'derived_from', 'same_as'}:
+                continue
+
+            char_name = field_name.replace('_', ' ')
+            if char_name in biosample_data["characteristics"]:
+                continue
+
+            if isinstance(field_value, list):
+                if all(isinstance(item, str) for item in field_value):
+                    biosample_data["characteristics"][char_name] = [
+                        {"text": item} for item in field_value if item and item.strip()
+                    ]
+                continue
+
+            biosample_data["characteristics"][char_name] = [{"text": str(field_value)}]
+
+        # Build relationships list
+        relationships = []
+
+        # Same as relationship
+        if hasattr(model, 'same_as') and model.same_as and model.same_as.strip():
+            relationships.append({
+                "type": "same as",
+                "target": model.same_as
+            })
+
+        # Derived from relationship (optional for cell line)
         if model.derived_from:
-            biosample_data["relationships"] = [{
+            relationships.append({
                 "type": "derived from",
                 "target": model.derived_from[0]
-            }]
+            })
+
+        # Add relationships to biosample_data if any exist
+        if relationships:
+            biosample_data["relationships"] = relationships
 
         return biosample_data

@@ -848,6 +848,12 @@ class BioSampleSubmitter:
 
             metadata_results = validation_results.get('metadata_results', {}) or {}
 
+            submission_metadata = None
+            if 'submission' in metadata_results:
+                submission_results = metadata_results['submission']
+                if submission_results.get('valid') and len(submission_results['valid']) > 0:
+                    submission_metadata = submission_results['valid'][0]
+
             if person_data is None and 'person' in metadata_results:
                 person_results = metadata_results['person']
                 if person_results.get('valid') and len(person_results['valid']) > 0:
@@ -860,6 +866,14 @@ class BioSampleSubmitter:
 
             contact_list = None
             organization_list = None
+            submission_title = None
+            submission_description = None
+
+            if submission_metadata:
+                submission_model = submission_metadata.get('model') if isinstance(submission_metadata,
+                                                                                  dict) else submission_metadata
+                submission_title = submission_model.get('Submission Title')
+                submission_description = submission_model.get('Submission Description')
 
             if person_data:
                 person_model = person_data.get('model') if isinstance(person_data, dict) else person_data
@@ -917,6 +931,10 @@ class BioSampleSubmitter:
                         submission_item['contact'] = contact_list
                     if organization_list:
                         submission_item['organization'] = organization_list
+                    if submission_title:
+                        characteristics['submission title'] = [{'text': submission_title}]
+                    if submission_description:
+                        characteristics['submission description'] = [{'text': submission_description}]
 
                     submission_data.append(submission_item)
 
