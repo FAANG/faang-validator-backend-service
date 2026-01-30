@@ -170,7 +170,8 @@ class WebinBioSamplesSubmission:
 
             if existing_biosample_entry:
                 updated_biosample_entry = copy.deepcopy(existing_biosample_entry)
-                tmp['characteristics']['sample name'] = existing_biosample_entry['characteristics']['sample name']
+                if 'sample name' in existing_biosample_entry['characteristics']:
+                    tmp['characteristics']['sample name'] = existing_biosample_entry['characteristics']['sample name']
 
                 if 'derived from' in tmp['characteristics']:
                     # replace with sample name it is derived from
@@ -181,9 +182,9 @@ class WebinBioSamplesSubmission:
                         if id['text'] in updated_biosamples_ids:
                             derived_from_name.append({'text': updated_biosamples_ids[id['text']]})
                         else:
-                            derivedfrom_biosample_entry = self.fetch_biosample_data(id['text'])
-                            if derivedfrom_biosample_entry:
-                                derived_from_name.append({'text': derivedfrom_biosample_entry['name']})
+                            fetched_biosample_entry = self.fetch_biosample_data(id['text'])
+                            if fetched_biosample_entry:
+                                derived_from_name.append({'text': fetched_biosample_entry['name']})
                             else:
                                 return {'Error': f"Error: derived_from BioSample Id ({id['text']}) is incorrect , "
                                        "please contact faang-dcc@ebi.ac.uk"}
