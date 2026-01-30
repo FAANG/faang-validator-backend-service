@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from app.validation.sample.base_validator import BaseValidator
 from app.validation.generic_validator_classes import OntologyValidator, RelationshipValidator
 from app.rulesets_pydantics.sample.cell_culture_ruleset import FAANGCellCultureSample
+from app.validation.validation_utils import auto_export_remaining_fields
 
 
 class CellCultureValidator(BaseValidator):
@@ -107,28 +108,7 @@ class CellCultureValidator(BaseValidator):
             'project', 'secondary_project', 'sample_description', 'availability', 'derived_from', 'same_as'
         }
 
-        for field_name, field_value in model.model_dump().items():
-            if field_value is None or (isinstance(field_value, str) and not field_value.strip()):
-                continue
-            if field_name in excluded_fields:
-                continue
-            if field_name.endswith('_term_source_id') or field_name.endswith('_unit'):
-                continue
-            if field_name in {'child_of', 'derived_from', 'same_as'}:
-                continue
-
-            char_name = field_name.replace('_', ' ')
-            if char_name in biosample_data["characteristics"]:
-                continue
-
-            if isinstance(field_value, list):
-                if all(isinstance(item, str) for item in field_value):
-                    biosample_data["characteristics"][char_name] = [
-                        {"text": item} for item in field_value if item and item.strip()
-                    ]
-                continue
-
-            biosample_data["characteristics"][char_name] = [{"text": str(field_value)}]
+        auto_export_remaining_fields(model, biosample_data, excluded_fields)
 
         relationships = []
 

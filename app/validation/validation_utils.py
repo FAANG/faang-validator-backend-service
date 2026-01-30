@@ -254,22 +254,18 @@ def auto_export_remaining_fields(
         if field_name in {'child_of', 'derived_from', 'same_as'}:
             continue
 
-        # Convert field name to characteristic format (birth_location -> birth location)
-        char_name = field_name.replace('_', ' ')
+        updated_field_name = field_name.replace('_', ' ')
 
-        # Skip if already in characteristics
-        if char_name in biosample_data["characteristics"]:
+        if updated_field_name in biosample_data["characteristics"]:
             continue
 
-        # Handle list values
         if isinstance(field_value, list):
             if all(isinstance(item, str) for item in field_value):
-                biosample_data["characteristics"][char_name] = [
+                biosample_data["characteristics"][updated_field_name] = [
                     {"text": item} for item in field_value if item and item.strip()
                 ]
             continue
 
-        # Handle simple values
-        biosample_data["characteristics"][char_name] = [{
+        biosample_data["characteristics"][updated_field_name] = [{
             "text": str(field_value)
         }]
