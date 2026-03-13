@@ -13,13 +13,13 @@ from app.validation.constants import (
 
 
 class WebinBioSamplesSubmission:
-    def __init__(self, username: str, password: str, json_to_submit: List[Dict], 
+    def __init__(self, username: str, password: str, json_to_submit: List[Dict],
                  mode: str, domain: Optional[str] = None):
         self.username = username
         self.password = password
         self.json_to_submit = json_to_submit
         self.domain_name = domain
-        
+
         if mode == 'test':
             self.webin_server = WEBIN_TEST_SERVER
             self.submission_server = SUBMISSION_TEST_SERVER
@@ -67,7 +67,8 @@ class WebinBioSamplesSubmission:
 
     def submit_records(self) -> Dict[str, str]:
         biosamples_ids = dict()
-        
+        biosample_cache = dict()
+
         print(f"Submitting {len(self.json_to_submit)} samples to BioSamples")
 
         # create a copy as we need to delete relationships part from dict
@@ -77,7 +78,10 @@ class WebinBioSamplesSubmission:
                 if key != 'relationships':
                     tmp[key] = value
             name = tmp['name']
-            
+
+            # get organism from parent for pool of specimens (BioSamples now requires it)
+            self.get_organism_from_parent(tmp, item.get('relationships', []), biosample_cache)
+
             tmp_json = json.dumps(tmp)
 
             create_submission_response = requests.post(
@@ -92,7 +96,7 @@ class WebinBioSamplesSubmission:
                     error_msg = error_data.get('message', str(error_data))
                 except:
                     error_msg = create_submission_response.text[:500] if create_submission_response.text else f"Status code: {create_submission_response.status_code}"
-                
+
                 print(f"Failed to submit sample {name}: Status {create_submission_response.status_code}, Details: {error_msg}")
                 return {'Error': f'Error: record was not submitted to BioSamples. '
                        f'Status: {create_submission_response.status_code}. '
@@ -106,7 +110,7 @@ class WebinBioSamplesSubmission:
         # update relationship part of records
         for item in self.json_to_submit:
             if ('relationships' in item and len(item['relationships']) > 0
-                    and item['relationships'][0]['target'] != 'restricted access'):
+                and item['relationships'][0]['target'] != 'restricted access'):
                 for relationship in item['relationships']:
                     if relationship['source'] in biosamples_ids:
                         relationship['source'] = biosamples_ids[
@@ -131,26 +135,64 @@ class WebinBioSamplesSubmission:
                         error_msg = error_data.get('message', str(error_data))
                     except:
                         error_msg = create_submission_response.text[:500] if create_submission_response.text else f"Status code: {create_submission_response.status_code}"
-                    
+
                     return {'Error': f'Error: relationship part was not updated. '
-                           f'Status: {create_submission_response.status_code}. '
-                           f'Details: {error_msg}. '
-                           'Please contact faang-dcc@ebi.ac.uk'}
+                                     f'Status: {create_submission_response.status_code}. '
+                                     f'Details: {error_msg}. '
+                                     'Please contact faang-dcc@ebi.ac.uk'}
 
         return biosamples_ids
 
-    def fetch_biosample_data(self, id: str) -> Optional[Dict]:
+    def fetch_biosample_data(self, id: str, server: str = None) -> Optional[Dict]:
         try:
-            response = requests.get(f"{self.submission_server}/biosamples"
-                                f"/samples/{id}")
+            base_url = server if server else SUBMISSION_PROD_SERVER
+            response = requests.get(f"{base_url}/biosamples/samples/{id}")
             if response.status_code == 200:
                 return response.json()
             return None
         except Exception:
             return None
 
-    def update_records(self) -> Dict[str, str]:
+    def get_organism_from_parent(self, tmp: Dict, relationships: List[Dict], cache: Dict) -> None:
 
+        characteristics = tmp.get('characteristics', {})
+        material_entries = characteristics.get('material', [])
+        material_text = material_entries[0].get('text', '') if material_entries else ''
+
+        if material_text != 'pool of specimens':
+            return
+        if 'organism' in characteristics or 'species' in characteristics:
+            return
+
+        parent_id = None
+        for rel in relationships:
+            if rel.get('type') == 'derived from':
+                parent_id = rel.get('target')
+                break
+
+        if not parent_id:
+            print(
+                f"Warning: pool of specimens '{tmp.get('name')}' has no derived_from relationship to fetch organism from")
+            return
+
+        if parent_id in cache:
+            parent_data = cache[parent_id]
+        else:
+            parent_data = self.fetch_biosample_data(parent_id)
+            if not parent_data:
+                print(f"Warning: could not fetch parent BioSample '{parent_id}' to inherit organism")
+                return
+            cache[parent_id] = parent_data
+
+        parent_characteristics = parent_data.get('characteristics', {})
+
+        for field in ['organism', 'species']:
+            if field in parent_characteristics:
+                characteristics[field] = parent_characteristics[field]
+                print(f"Inherited '{field}' from parent {parent_id} for pool '{tmp.get('name')}'")
+
+
+    def update_records(self) -> Dict[str, str]:
         updated_biosamples_ids = dict()
 
         for item in self.json_to_submit:
@@ -166,7 +208,7 @@ class WebinBioSamplesSubmission:
             accession = tmp['accession']
 
             # fetch the existing entry from the database
-            existing_biosample_entry = self.fetch_biosample_data(accession)
+            existing_biosample_entry = self.fetch_biosample_data(accession, server=self.submission_server)
 
             if existing_biosample_entry:
                 updated_biosample_entry = copy.deepcopy(existing_biosample_entry)
@@ -182,12 +224,13 @@ class WebinBioSamplesSubmission:
                         if id['text'] in updated_biosamples_ids:
                             derived_from_name.append({'text': updated_biosamples_ids[id['text']]})
                         else:
-                            fetched_biosample_entry = self.fetch_biosample_data(id['text'])
+                            fetched_biosample_entry = self.fetch_biosample_data(id['text'],
+                                                                                server=self.submission_server)
                             if fetched_biosample_entry:
                                 derived_from_name.append({'text': fetched_biosample_entry['name']})
                             else:
                                 return {'Error': f"Error: derived_from BioSample Id ({id['text']}) is incorrect , "
-                                       "please contact faang-dcc@ebi.ac.uk"}
+                                                 "please contact faang-dcc@ebi.ac.uk"}
 
                     tmp['characteristics']['derived from'] = derived_from_name
 
@@ -210,12 +253,13 @@ class WebinBioSamplesSubmission:
                         error_data = update_submission_response.json()
                         error_msg = error_data.get('message', str(error_data))
                     except:
-                        error_msg = update_submission_response.text[:500] if update_submission_response.text else f"Status code: {update_submission_response.status_code}"
-                    
+                        error_msg = update_submission_response.text[
+                                    :500] if update_submission_response.text else f"Status code: {update_submission_response.status_code}"
+
                     return {'Error': f'Error: relationship part was not updated. '
-                           f'Status: {update_submission_response.status_code}. '
-                           f'Details: {error_msg}. '
-                           'Please contact faang-dcc@ebi.ac.uk'}
+                                     f'Status: {update_submission_response.status_code}. '
+                                     f'Details: {error_msg}. '
+                                     'Please contact faang-dcc@ebi.ac.uk'}
 
                 updated_biosamples_ids[accession] = update_submission_response.json()[
                     'name']
