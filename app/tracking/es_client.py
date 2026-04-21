@@ -17,7 +17,7 @@ def get_es_client() -> Elasticsearch:
     if _es_client is None:
         try:
             node = os.environ['ES_URL']
-            user = os.environ['ES_USERNAME']
+            user = os.environ['ES_USER']
             password = os.environ['ES_PASSWORD']
         except KeyError as missing:
             raise RuntimeError(
