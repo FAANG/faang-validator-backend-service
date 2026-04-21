@@ -2,11 +2,11 @@ import os
 from typing import Optional
 
 from elasticsearch import Elasticsearch
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
 
 # Load environment variables from .env file
-load_dotenv()
+# load_dotenv()
 
 
 _es_client: Optional[Elasticsearch] = None
