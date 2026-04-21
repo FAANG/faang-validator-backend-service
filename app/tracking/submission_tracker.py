@@ -62,7 +62,7 @@ def save_submission_data(
 
         print("study_id --->", study_id)
         print("study_obj --->", study_obj)
-        # es.index(index=SUBMISSIONS_INDEX, id=study_id, body=study_obj)
+        es.index(index=SUBMISSIONS_INDEX, id=study_id, body=study_obj)
         written.append(study_obj)
         logger.info(
             "save_submission_data: indexed study_id=%s action=%s",
