@@ -176,7 +176,7 @@ async def validate_data(request: ValidationRequest):
     try:
         await prefetch_data_by_type(request.data, request.data_type)
 
-        print(f"Running validation for data_type: {request.data_type}...")
+        print(f"Running validation for data_type: {request.data_type}...{request.action}")
 
         sample_action = "update" if request.data_type == "sample" and request.action == "update" else "submit"
 
