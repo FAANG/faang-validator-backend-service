@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional, Literal
-import json
 import traceback
 
 from app.conversions.file_processor import parse_contents_api
