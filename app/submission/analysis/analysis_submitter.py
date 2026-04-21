@@ -1,12 +1,15 @@
+import os
 import uuid
 import subprocess
 import copy
 import re
-from typing import Dict, Any
+import traceback
+from typing import Dict, Any, Optional
 from lxml import etree
 
 from app.conversions.generate_analysis_and_submission_xml import get_xml_files
 from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
+from app.tracking.submission_tracker import save_submission_data
 
 
 def _parse_submission_results(submission_results) -> tuple:
@@ -123,22 +126,21 @@ class AnalysisSubmitter:
             result_str = submission_results.decode('utf-8')
 
             print(f"Submission result: {'Success' if success else 'Failed'}")
-            print(submission_results.decode('utf-8'))
+            print(result_str)
 
-            try:
-                import os
-                if os.path.exists(analysis_xml):
-                    os.remove(analysis_xml)
-                if os.path.exists(submission_xml):
-                    os.remove(submission_xml)
-            except Exception as e:
-                print(f"Warning: Could not cleanup XML files: {e}")
+            # -----------------------------------------------------------------
+            # Submission tracking: on success, write a record per study into
+            # the Elasticsearch `submissions` index.
+            # -----------------------------------------------------------------
+            if success:
+                self._write_tracking_record(
+                    submission_results=submission_results,
+                    analysis_xml_path=analysis_xml,
+                    submission_id=submission_id,
+                    action=action,
+                )
 
-            # return {
-            #     'success': True,
-            #     'message': f'XML files generated successfully (submission disabled for testing)',
-            #     'submission_results': f'Generated files:\n  - {submission_xml}\n  - {analysis_xml}\n'
-            # }
+            self._cleanup_xml_files([analysis_xml, submission_xml])
 
             if success:
                 action_message = "updated in" if action == "update" else "submitted to"
@@ -160,10 +162,55 @@ class AnalysisSubmitter:
 
         except Exception as e:
             print(f"Error during ENA submission: {str(e)}")
-            import traceback
             traceback.print_exc()
             return {
                 'success': False,
                 'message': f'Submission error: {str(e)}',
                 'errors': [str(e)]
             }
+
+    # -------------------------------------------------------------------
+    # Tracking + cleanup helpers
+    # -------------------------------------------------------------------
+
+    @staticmethod
+    def _write_tracking_record(
+        submission_results: bytes,
+        analysis_xml_path: Optional[str],
+        submission_id: str,
+        action: str,
+    ) -> None:
+
+        try:
+            receipt_root = etree.fromstring(submission_results)
+
+            analysis_xml_root = None
+            if analysis_xml_path and os.path.exists(analysis_xml_path):
+                analysis_xml_root = etree.parse(analysis_xml_path).getroot()
+            else:
+                print(
+                    f"WARNING: analysis XML not on disk at {analysis_xml_path}; "
+                    "tracking record will be written without analyses list."
+                )
+
+            save_submission_data(
+                receipt_root=receipt_root,
+                original_xml_roots={'analysis': analysis_xml_root},
+                submission_type='analyses',
+                action=action,
+            )
+        except Exception as tracking_exc:
+            print(
+                f"WARNING: ENA submission succeeded but tracking write "
+                f"failed for submission_id={submission_id}: {tracking_exc}"
+            )
+            traceback.print_exc()
+
+    @staticmethod
+    def _cleanup_xml_files(paths) -> None:
+        for xml_file in paths:
+            try:
+                if xml_file and os.path.exists(xml_file):
+                    os.remove(xml_file)
+            except Exception as e:
+                print(f"Warning: Could not cleanup {xml_file}: {e}")
