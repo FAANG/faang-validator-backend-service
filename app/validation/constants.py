@@ -400,16 +400,17 @@ ADDITIONAL_INFO_MAPPING = {
 }
 
 WEBIN_TEST_SERVER = 'https://wwwdev.ebi.ac.uk/ena/submit/webin/auth'
-WEBIN_PROD_SERVER = 'https://www.ebi.ac.uk/ena/submit/webin/auth'
+WEBIN_PROD_SERVER = 'https://wwwdev.ebi.ac.uk/ena/submit/webin/auth'
 
 AAP_TEST_SERVER = 'https://explore.api.aai.ebi.ac.uk'
 AAP_PROD_SERVER = 'https://api.aai.ebi.ac.uk'
 
 SUBMISSION_TEST_SERVER = 'https://wwwdev.ebi.ac.uk'
-SUBMISSION_PROD_SERVER = 'https://www.ebi.ac.uk'
+SUBMISSION_PROD_SERVER = 'https://wwwdev.ebi.ac.uk'
 
 ENA_TEST_SERVER = 'https://wwwdev.ebi.ac.uk/ena/submit/drop-box/submit/'
-ENA_PROD_SERVER = 'https://www.ebi.ac.uk/ena/submit/drop-box/submit/'
+# ENA_PROD_SERVER = 'https://www.ebi.ac.uk/ena/submit/drop-box/submit/'
+ENA_PROD_SERVER = 'https://wwwdev.ebi.ac.uk/ena/submit/drop-box/submit/'
 
 BE_SVC = 'http://backend-svc:8000'
 ZOOMA_SERVICE = 'http://www.ebi.ac.uk/spot/zooma/v2/api/services'
