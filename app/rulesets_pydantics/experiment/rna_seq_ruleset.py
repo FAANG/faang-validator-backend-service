@@ -40,12 +40,12 @@ class RNASeqExperiment(ExperimentCoreMetadata):
     # recommended fields
     rna_purity_260_280_ratio: Optional[Union[float, Literal[
         "not applicable", "not collected", "not provided", "restricted access"
-    ]]] = Field(None, alias="RNA Purity 260-280 ratio",
+    ]]] = Field(None, alias="RNA purity 260-280 ratio",
                 json_schema_extra={"recommended": True})
     
     rna_purity_260_230_ratio: Optional[Union[float, Literal[
         "not applicable", "not collected", "not provided", "restricted access"
-    ]]] = Field(None, alias="RNA Purity 260-230 ratio",
+    ]]] = Field(None, alias="RNA purity 260-230 ratio",
                 json_schema_extra={"recommended": True})
     
     rna_integrity_number: Optional[Union[float, Literal[
