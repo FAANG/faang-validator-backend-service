@@ -88,13 +88,13 @@ class scRNASeqExperiment(ExperimentCoreMetadata):
         "not collected",
         "not provided",
         "restricted access"
-    ]]] = Field(None, alias="RNA Purity 260-280 Ratio")
+    ]]] = Field(None, alias="RNA purity 260-280 ratio")
     
     rna_purity_260_230_ratio: Optional[Union[float, Literal[
         "not collected",
         "not provided",
         "restricted access"
-    ]]] = Field(None, alias="RNA Purity 260-230 Ratio")
+    ]]] = Field(None, alias="RNA purity 260-230 ratio")
     
     rna_integrity_number: Optional[Union[float, Literal[
         "not collected",
