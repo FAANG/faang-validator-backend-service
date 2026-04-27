@@ -248,7 +248,6 @@ class WebinBioSamplesSubmission:
                     data=updated_json)
 
                 if update_submission_response.status_code != 200:
-                    error_msg = 'Unknown error'
                     try:
                         error_data = update_submission_response.json()
                         error_msg = error_data.get('message', str(error_data))
@@ -256,7 +255,7 @@ class WebinBioSamplesSubmission:
                         error_msg = update_submission_response.text[
                                     :500] if update_submission_response.text else f"Status code: {update_submission_response.status_code}"
 
-                    return {'Error': f'Error: relationship part was not updated. '
+                    return {'Error': f'Error: Issue with updating submissions. '
                                      f'Status: {update_submission_response.status_code}. '
                                      f'Details: {error_msg}. '
                                      'Please contact faang-dcc@ebi.ac.uk'}
