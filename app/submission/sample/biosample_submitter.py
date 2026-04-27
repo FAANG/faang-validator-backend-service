@@ -956,22 +956,22 @@ class BioSampleSubmitter:
             )
 
             if update_existing:
-                biosamples_ids = submission.update_records()
+                biosamples_response = submission.update_records()
             else:
-                biosamples_ids = submission.submit_records()
+                biosamples_response = submission.submit_records()
 
-            if isinstance(biosamples_ids, dict) and 'Error' in biosamples_ids:
+            if isinstance(biosamples_response, dict) and 'Error' in biosamples_response:
                 return {
                     'success': False,
-                    'error': biosamples_ids['Error'],
+                    'error': biosamples_response['Error'],
                     'biosamples_ids': {},
-                    'errors': [biosamples_ids['Error']]
+                    'errors': [biosamples_response['Error']]
                 }
 
             return {
                 'success': True,
-                'biosamples_ids': biosamples_ids,
-                'submitted_count': len(biosamples_ids),
+                'biosamples_ids': biosamples_response,
+                'submitted_count': len(biosamples_response),
                 'errors': []
             }
 
