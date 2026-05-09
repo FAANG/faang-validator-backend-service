@@ -864,7 +864,7 @@ class BioSampleSubmitter:
             # validators emit (`specimen collection date`, `geographic location`).
             # Without this step, downstream experiment submissions that reference
             # our samples are rejected by ENA with "must have required property"
-            # errors. Mirrors Django's BiosamplesFileConverter.py:290-293.
+            # errors.
             # -----------------------------------------------------------------
             collection_date, geographic_location = collect_ena_required_fields(biosample_exports)
 
