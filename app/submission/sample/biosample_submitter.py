@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from app.submission.sample.webin_submission import WebinBioSamplesSubmission
+from app.submission.sample.ena_required_fields import collect_ena_required_fields
 
 
 def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> BaseModel:
@@ -852,6 +853,37 @@ class BioSampleSubmitter:
                     'error': 'No valid samples to submit',
                     'biosamples_ids': {}
                 }
+
+            # -----------------------------------------------------------------
+            # Inject ENA/INSDC-mandatory fields onto each sample's characteristics.
+            #
+            # ENA's submission validator enforces the INSDC minimum sample checklist
+            # on every BioSample referenced by an experiment. Two required fields -
+            # `collection date` and `geographic location (country and/or sea)` - use
+            # names that don't match the FAANG-flavoured names the per-sample
+            # validators emit (`specimen collection date`, `geographic location`).
+            # Without this step, downstream experiment submissions that reference
+            # our samples are rejected by ENA with "must have required property"
+            # errors. Mirrors Django's BiosamplesFileConverter.py:290-293.
+            # -----------------------------------------------------------------
+            collection_date, geographic_location = collect_ena_required_fields(biosample_exports)
+
+            for sample_type, sample_list in biosample_exports.items():
+                for sample in sample_list:
+                    sample_name = sample.get('sample_name')
+                    biosample_format = sample.get('biosample_format', {}) or {}
+                    characteristics = biosample_format.setdefault('characteristics', {})
+
+                    if sample_name in collection_date and sample_name in geographic_location:
+                        characteristics['collection date'] = [{
+                            'text': collection_date[sample_name],
+                            'tag': 'attribute',
+                        }]
+                        characteristics['geographic location (country and/or sea)'] = [{
+                            'text': geographic_location[sample_name],
+                            'tag': 'attribute',
+                        }]
+
 
             metadata_results = validation_results.get('metadata_results', {}) or {}
 
