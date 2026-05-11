@@ -930,17 +930,6 @@ class BioSampleSubmitter:
                     'Role': person_model['Person Role'],
                 })
 
-            # if person_data:
-            #     person_model = person_data.get('model') if isinstance(person_data, dict) else person_data
-            #     if 'Person First Name' in person_model:
-            #         contact_list = [{
-            #             'FirstName': person_model['Person First Name'],
-            #             'LastName': person_model['Person Last Name'],
-            #             'MidInitials': getattr(person_model, 'Person Initials', '') or '',
-            #             'E-mail': person_model['Person Email'],
-            #             'Role': person_model['Person Role'],
-            #         }]
-
             organization_list = []
 
             for entry in organization_entries:
@@ -952,16 +941,6 @@ class BioSampleSubmitter:
                     'URL': org_model['Organization URI'],
                     'Role': org_model['Organization Role'],
                 })
-
-            # if organization_data:
-            #     org_model = organization_data.get('model') if isinstance(organization_data, dict) else organization_data
-            #     if 'Organization Name' in org_model:
-            #         organization_list = [{
-            #             'Name': org_model['Organization Name'],
-            #             'Address': org_model['Organization Address'],
-            #             'URL': org_model['Organization URI'],
-            #             'Role': org_model['Organization Role'],
-            #         }]
 
             submission_data = []
 
