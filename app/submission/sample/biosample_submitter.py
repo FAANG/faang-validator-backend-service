@@ -484,6 +484,11 @@ class BioSampleSubmitter:
                                     characteristics['species'] = parent_biosample_data['characteristics']['species']
                                     print(f"  {sample_name_export}: added organism via fallback lookup")
 
+                        if 'organism' not in characteristics:
+                            raise ValueError(
+                                f"Sample '{sample_name_export}' is missing organism for BioSamples submission"
+                            )
+
                         biosample_exports[sample_type].append({
                             'sample_name': valid_sample['sample_name'],
                             'biosample_format': biosample_data
@@ -495,6 +500,7 @@ class BioSampleSubmitter:
                             f"  [{idx + 1}/{count}] Failed to export {sample_name_export}: {str(e)}")
                         import traceback
                         traceback.print_exc()
+                        raise
 
         total_exported = sum(len(samples) for samples in biosample_exports.values())
         print(f"Exported samples: {total_exported}")
