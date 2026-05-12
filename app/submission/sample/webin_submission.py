@@ -98,10 +98,19 @@ class WebinBioSamplesSubmission:
                     error_msg = create_submission_response.text[:500] if create_submission_response.text else f"Status code: {create_submission_response.status_code}"
 
                 print(f"Failed to submit sample {name}: Status {create_submission_response.status_code}, Details: {error_msg}")
-                return {'Error': f'Error: record was not submitted to BioSamples. '
-                       f'Status: {create_submission_response.status_code}. '
-                       f'Details: {error_msg}. '
-                       'Please contact faang-dcc@ebi.ac.uk'}
+                return {
+                    'Error': (
+                        f'Failed to submit sample {name}. '
+                        f'Status: {create_submission_response.status_code}. '
+                        f'Details: {error_msg}. '
+                        'Please contact faang-dcc@ebi.ac.uk'
+                    ),
+                    'failed_sample': name,
+                    'status_code': create_submission_response.status_code,
+                    'details': error_msg,
+                    'biosamples_ids': biosamples_ids,
+                    'submitted_count': len(biosamples_ids),
+                }
 
             biosamples_ids[name] = create_submission_response.json()[
                 'accession']
