@@ -271,7 +271,8 @@ class BioSampleSubmitter:
 
                     # Check if model has organism field (for organism samples)
                     has_organism_directly = False
-                    if hasattr(model, 'organism') and hasattr(model, 'organism_term_source_id'):
+                    if normalized_sample_type == 'organism' and hasattr(model, 'organism') and hasattr(model,
+                                                                                                       'organism_term_source_id'):
                         # This is an organism sample - extract organism info
                         from app.validation.sample.organism_validator import OrganismValidator
                         org_validator = OrganismValidator()
@@ -1000,11 +1001,18 @@ class BioSampleSubmitter:
                 biosamples_response = submission.submit_records()
 
             if isinstance(biosamples_response, dict) and 'Error' in biosamples_response:
+                partial_ids = biosamples_response.get('biosamples_ids', {}) or {}
+
                 return {
                     'success': False,
+                    'message': 'Submission partially completed' if partial_ids else 'Submission failed',
                     'error': biosamples_response['Error'],
-                    'biosamples_ids': {},
-                    'errors': [biosamples_response['Error']]
+                    'biosamples_ids': partial_ids,
+                    'submitted_count': len(partial_ids),
+                    'failed_sample': biosamples_response.get('failed_sample'),
+                    'status_code': biosamples_response.get('status_code'),
+                    'details': biosamples_response.get('details'),
+                    'errors': [biosamples_response['Error']],
                 }
 
             return {
