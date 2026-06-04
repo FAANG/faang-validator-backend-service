@@ -1,8 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional, Literal
-import json
 import traceback
 
 from app.conversions.file_processor import parse_contents_api
@@ -49,6 +47,9 @@ class SubmissionResponse(BaseModel):
     biosamples_ids: Optional[Dict[str, str]] = None
     submitted_count: Optional[int] = None
     errors: Optional[List[str]] = None
+    failed_sample: Optional[str] = None
+    status_code: Optional[int] = None
+    details: Optional[str] = None
 
 
 class ValidationDataRequest(BaseModel):
@@ -176,7 +177,7 @@ async def validate_data(request: ValidationRequest):
     try:
         await prefetch_data_by_type(request.data, request.data_type)
 
-        print(f"Running validation for data_type: {request.data_type}...")
+        print(f"Running validation for data_type: {request.data_type}...{request.action}")
 
         sample_action = "update" if request.data_type == "sample" and request.action == "update" else "submit"
 
@@ -327,9 +328,15 @@ async def submit_to_biosamples(request: SubmissionRequest):
         else:
             return SubmissionResponse(
                 success=False,
-                message="Submission failed",
-                errors=result.get('errors', [result.get('error', 'Unknown error')])
+                message=result.get("message", "Submission failed"),
+                biosamples_ids=result.get("biosamples_ids", {}),
+                submitted_count=result.get("submitted_count"),
+                errors=result.get("errors", [result.get("error", "Unknown error")]),
+                failed_sample=result.get("failed_sample"),
+                status_code=result.get("status_code"),
+                details=result.get("details"),
             )
+
 
     except Exception as e:
         print(f"Error during submission: {str(e)}")

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from app.submission.sample.webin_submission import WebinBioSamplesSubmission
+from app.submission.sample.ena_required_fields import collect_ena_required_fields
 
 
 def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> BaseModel:
@@ -270,7 +271,8 @@ class BioSampleSubmitter:
 
                     # Check if model has organism field (for organism samples)
                     has_organism_directly = False
-                    if hasattr(model, 'organism') and hasattr(model, 'organism_term_source_id'):
+                    if normalized_sample_type == 'organism' and hasattr(model, 'organism') and hasattr(model,
+                                                                                                       'organism_term_source_id'):
                         # This is an organism sample - extract organism info
                         from app.validation.sample.organism_validator import OrganismValidator
                         org_validator = OrganismValidator()
@@ -482,6 +484,11 @@ class BioSampleSubmitter:
                                     characteristics['species'] = parent_biosample_data['characteristics']['species']
                                     print(f"  {sample_name_export}: added organism via fallback lookup")
 
+                        # if 'organism' not in characteristics:
+                        #     raise ValueError(
+                        #         f"Sample '{sample_name_export}' is missing organism for BioSamples submission"
+                        #     )
+
                         biosample_exports[sample_type].append({
                             'sample_name': valid_sample['sample_name'],
                             'biosample_format': biosample_data
@@ -493,6 +500,7 @@ class BioSampleSubmitter:
                             f"  [{idx + 1}/{count}] Failed to export {sample_name_export}: {str(e)}")
                         import traceback
                         traceback.print_exc()
+                        raise
 
         total_exported = sum(len(samples) for samples in biosample_exports.values())
         print(f"Exported samples: {total_exported}")
@@ -853,6 +861,37 @@ class BioSampleSubmitter:
                     'biosamples_ids': {}
                 }
 
+            # -----------------------------------------------------------------
+            # Inject ENA/INSDC-mandatory fields onto each sample's characteristics.
+            #
+            # ENA's submission validator enforces the INSDC minimum sample checklist
+            # on every BioSample referenced by an experiment. Two required fields -
+            # `collection date` and `geographic location (country and/or sea)` - use
+            # names that don't match the FAANG-flavoured names the per-sample
+            # validators emit (`specimen collection date`, `geographic location`).
+            # Without this step, downstream experiment submissions that reference
+            # our samples are rejected by ENA with "must have required property"
+            # errors.
+            # -----------------------------------------------------------------
+            collection_date, geographic_location = collect_ena_required_fields(biosample_exports)
+
+            for sample_type, sample_list in biosample_exports.items():
+                for sample in sample_list:
+                    sample_name = sample.get('sample_name')
+                    biosample_format = sample.get('biosample_format', {}) or {}
+                    characteristics = biosample_format.setdefault('characteristics', {})
+
+                    if sample_name in collection_date and sample_name in geographic_location:
+                        characteristics['collection date'] = [{
+                            'text': collection_date[sample_name],
+                            'tag': 'attribute',
+                        }]
+                        characteristics['geographic location (country and/or sea)'] = [{
+                            'text': geographic_location[sample_name],
+                            'tag': 'attribute',
+                        }]
+
+
             metadata_results = validation_results.get('metadata_results', {}) or {}
 
             submission_metadata = None
@@ -861,15 +900,18 @@ class BioSampleSubmitter:
                 if submission_results.get('valid') and len(submission_results['valid']) > 0:
                     submission_metadata = submission_results['valid'][0]
 
-            if person_data is None and 'person' in metadata_results:
-                person_results = metadata_results['person']
-                if person_results.get('valid') and len(person_results['valid']) > 0:
-                    person_data = person_results['valid'][0]
+            # if person_data is None and 'person' in metadata_results:
+            #     person_results = metadata_results['person']
+            #     if person_results.get('valid') and len(person_results['valid']) > 0:
+            #         person_data = person_results['valid'][0]
+            #
+            # if organization_data is None and 'organization' in metadata_results:
+            #     org_results = metadata_results['organization']
+            #     if org_results.get('valid') and len(org_results['valid']) > 0:
+            #         organization_data = org_results['valid'][0]
 
-            if organization_data is None and 'organization' in metadata_results:
-                org_results = metadata_results['organization']
-                if org_results.get('valid') and len(org_results['valid']) > 0:
-                    organization_data = org_results['valid'][0]
+            person_entries = metadata_results.get('person', {}).get('valid', [])
+            organization_entries = metadata_results.get('organization', {}).get('valid', [])
 
             contact_list = None
             organization_list = None
@@ -882,26 +924,30 @@ class BioSampleSubmitter:
                 submission_title = submission_model.get('Submission Title')
                 submission_description = submission_model.get('Submission Description')
 
-            if person_data:
-                person_model = person_data.get('model') if isinstance(person_data, dict) else person_data
-                if 'Person First Name' in person_model:
-                    contact_list = [{
-                        'FirstName': person_model['Person First Name'],
-                        'LastName': person_model['Person Last Name'],
-                        'MidInitials': getattr(person_model, 'Person Initials', '') or '',
-                        'E-mail': person_model['Person Email'],
-                        'Role': person_model['Person Role'],
-                    }]
+            contact_list = []
 
-            if organization_data:
-                org_model = organization_data.get('model') if isinstance(organization_data, dict) else organization_data
-                if 'Organization Name' in org_model:
-                    organization_list = [{
-                        'Name': org_model['Organization Name'],
-                        'Address': org_model['Organization Address'],
-                        'URL': org_model['Organization URI'],
-                        'Role': org_model['Organization Role'],
-                    }]
+            for entry in person_entries:
+                person_model = entry.get('model')
+
+                contact_list.append({
+                    'FirstName': person_model['Person First Name'],
+                    'LastName': person_model['Person Last Name'],
+                    'MidInitials': person_model.get('Person Initials', '') or '',
+                    'E-mail': person_model['Person Email'],
+                    'Role': person_model['Person Role'],
+                })
+
+            organization_list = []
+
+            for entry in organization_entries:
+                org_model = entry.get('model')
+
+                organization_list.append({
+                    'Name': org_model['Organization Name'],
+                    'Address': org_model['Organization Address'],
+                    'URL': org_model['Organization URI'],
+                    'Role': org_model['Organization Role'],
+                })
 
             submission_data = []
 
@@ -956,22 +1002,29 @@ class BioSampleSubmitter:
             )
 
             if update_existing:
-                biosamples_ids = submission.update_records()
+                biosamples_response = submission.update_records()
             else:
-                biosamples_ids = submission.submit_records()
+                biosamples_response = submission.submit_records()
 
-            if isinstance(biosamples_ids, dict) and 'Error' in biosamples_ids:
+            if isinstance(biosamples_response, dict) and 'Error' in biosamples_response:
+                partial_ids = biosamples_response.get('biosamples_ids', {}) or {}
+
                 return {
                     'success': False,
-                    'error': biosamples_ids['Error'],
-                    'biosamples_ids': {},
-                    'errors': [biosamples_ids['Error']]
+                    'message': 'Submission partially completed' if partial_ids else 'Submission failed',
+                    'error': biosamples_response['Error'],
+                    'biosamples_ids': partial_ids,
+                    'submitted_count': len(partial_ids),
+                    'failed_sample': biosamples_response.get('failed_sample'),
+                    'status_code': biosamples_response.get('status_code'),
+                    'details': biosamples_response.get('details'),
+                    'errors': [biosamples_response['Error']],
                 }
 
             return {
                 'success': True,
-                'biosamples_ids': biosamples_ids,
-                'submitted_count': len(biosamples_ids),
+                'biosamples_ids': biosamples_response,
+                'submitted_count': len(biosamples_response),
                 'errors': []
             }
 

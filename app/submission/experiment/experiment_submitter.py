@@ -1,12 +1,15 @@
+import os
 import uuid
 import subprocess
 import copy
 import re
-from typing import Dict, Any
+import traceback
+from typing import Dict, Any, Optional
 from lxml import etree
 
 from app.conversions.generate_experiment_xmls import get_xml_files
 from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
+from app.tracking.submission_tracker import save_submission_data
 
 
 def _parse_submission_results(submission_results) -> tuple:
@@ -71,7 +74,6 @@ class ExperimentSubmitter:
 
         return get_xml_files(prepared_data, submission_id, action=action)
 
-
     def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[str, Any]:
         try:
             submission_id = str(uuid.uuid4())
@@ -89,33 +91,18 @@ class ExperimentSubmitter:
             )
 
             # Check for errors in XML generation
-            if experiment_xml and experiment_xml.startswith('Error:'):
-                return {
-                    'success': False,
-                    'message': 'Failed to generate experiment XML',
-                    'errors': [experiment_xml]
-                }
-
-            if run_xml and run_xml.startswith('Error:'):
-                return {
-                    'success': False,
-                    'message': 'Failed to generate run XML',
-                    'errors': [run_xml]
-                }
-
-            if study_xml and study_xml.startswith('Error:'):
-                return {
-                    'success': False,
-                    'message': 'Failed to generate study XML',
-                    'errors': [study_xml]
-                }
-
-            if submission_xml and submission_xml.startswith('Error:'):
-                return {
-                    'success': False,
-                    'message': 'Failed to generate submission XML',
-                    'errors': [submission_xml]
-                }
+            for name, xml in [
+                ('experiment', experiment_xml),
+                ('run', run_xml),
+                ('study', study_xml),
+                ('submission', submission_xml),
+            ]:
+                if xml and xml.startswith('Error:'):
+                    return {
+                        'success': False,
+                        'message': f'Failed to generate {name} XML',
+                        'errors': [xml],
+                    }
 
             print(f"Generated XML files: {submission_xml}, {experiment_xml}, {run_xml}, {study_xml}")
 
@@ -143,23 +130,29 @@ class ExperimentSubmitter:
             result_str = submission_results.decode('utf-8')
 
             print(f"Submission result: {'Success' if success else 'Failed'}")
-            print(submission_results.decode('utf-8'))
+            print(result_str)
 
-            # Cleanup XML files
-            try:
-                import os
-                for xml_file in [experiment_xml, run_xml, study_xml, submission_xml]:
-                    if xml_file and os.path.exists(xml_file):
-                        os.remove(xml_file)
-            except Exception as e:
-                print(f"Warning: Could not cleanup XML files: {e}")
+            # -----------------------------------------------------------------
+            # Submission tracking: on success, write a record per study into
+            # the Elasticsearch `submissions` index. This is what the
+            # tracking dashboard, the subscription system, and the FAANG
+            # data-portal ingestion pipeline all read from. If this step
+            # fails we log loudly but do NOT fail the submission response —
+            # the data is already in ENA at this point.
+            # -----------------------------------------------------------------
+            if success:
+                self._write_tracking_record(
+                    submission_results=submission_results,
+                    experiment_xml_path=experiment_xml,
+                    submission_id=submission_id,
+                    action=action,
+                )
 
-            # # Return success for testing (submission is commented out)
-            # return {
-            #     'success': True,
-            #     'message': f'XML files generated successfully (submission disabled for testing)',
-            #     'submission_results': f'Generated files:\n  - {experiment_xml}\n  - {run_xml}\n  - {study_xml}\n  - {submission_xml}'
-            # }
+            # Cleanup XML files (runs AFTER tracking so the experiment
+            # XML is still on disk when the tracker needs it).
+            self._cleanup_xml_files(
+                [experiment_xml, run_xml, study_xml, submission_xml]
+            )
 
             if success:
                 action_message = "updated in" if action == "update" else "submitted to"
@@ -181,10 +174,54 @@ class ExperimentSubmitter:
 
         except Exception as e:
             print(f"Error during ENA submission: {str(e)}")
-            import traceback
             traceback.print_exc()
             return {
                 'success': False,
                 'message': f'Submission error: {str(e)}',
                 'errors': [str(e)]
             }
+
+    # -------------------------------------------------------------------
+    # Tracking + cleanup helpers
+    # -------------------------------------------------------------------
+
+    @staticmethod
+    def _write_tracking_record(
+        submission_results: bytes,
+        experiment_xml_path: Optional[str],
+        submission_id: str,
+        action: str,
+    ) -> None:
+        try:
+            receipt_root = etree.fromstring(submission_results)
+
+            experiment_xml_root = None
+            if experiment_xml_path and os.path.exists(experiment_xml_path):
+                experiment_xml_root = etree.parse(experiment_xml_path).getroot()
+            else:
+                print(
+                    f"WARNING: experiment XML not on disk at {experiment_xml_path}; "
+                    "tracking record will be written without experiments list."
+                )
+
+            save_submission_data(
+                receipt_root=receipt_root,
+                original_xml_roots={'experiment': experiment_xml_root},
+                submission_type='experiments',
+                action=action,
+            )
+        except Exception as tracking_exc:
+            print(
+                f"WARNING: ENA submission succeeded but tracking write "
+                f"failed for submission_id={submission_id}: {tracking_exc}"
+            )
+            traceback.print_exc()
+
+    @staticmethod
+    def _cleanup_xml_files(paths) -> None:
+        for xml_file in paths:
+            try:
+                if xml_file and os.path.exists(xml_file):
+                    os.remove(xml_file)
+            except Exception as e:
+                print(f"Warning: Could not cleanup {xml_file}: {e}")

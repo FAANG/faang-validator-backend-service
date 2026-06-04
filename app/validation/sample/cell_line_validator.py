@@ -175,11 +175,17 @@ class CellLineValidator(BaseValidator):
             })
 
         # Derived from relationship (optional for cell line)
-        if model.derived_from:
-            relationships.append({
-                "type": "derived from",
-                "target": model.derived_from[0]
-            })
+        if hasattr(model, 'derived_from') and model.derived_from:
+            derived_from_values = model.derived_from
+            if isinstance(derived_from_values, str):
+                derived_from_values = [derived_from_values]
+
+            for parent in derived_from_values:
+                if parent and str(parent).strip():
+                    relationships.append({
+                        "type": "derived from",
+                        "target": str(parent).strip()
+                    })
 
         # Add relationships to biosample_data if any exist
         if relationships:

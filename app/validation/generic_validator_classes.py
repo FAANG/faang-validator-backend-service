@@ -147,7 +147,7 @@ class OntologyValidator:
         try:
             print(term_id)
             url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=50)
             response.raise_for_status()
             data = response.json()
 
@@ -165,7 +165,7 @@ class OntologyValidator:
 
         try:
             url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=90)) as response:
                 response.raise_for_status()
                 data = await response.json()
 

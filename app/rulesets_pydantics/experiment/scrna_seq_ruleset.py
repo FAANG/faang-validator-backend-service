@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, AliasChoices
 from typing import Optional, Literal, Union
 from app.validation.validation_utils import (
     validate_url,
@@ -88,13 +88,27 @@ class scRNASeqExperiment(ExperimentCoreMetadata):
         "not collected",
         "not provided",
         "restricted access"
-    ]]] = Field(None, alias="RNA Purity 260-280 Ratio")
+    ]]] = Field(None,
+                validation_alias=AliasChoices(
+                    "RNA purity 260-280 ratio",
+                    "RNA Purity 260-280 ratio",
+                    "RNA Purity 260-280 Ratio"
+                ),
+                serialization_alias="RNA purity 260-280 ratio",
+                )
     
     rna_purity_260_230_ratio: Optional[Union[float, Literal[
         "not collected",
         "not provided",
         "restricted access"
-    ]]] = Field(None, alias="RNA Purity 260-230 Ratio")
+    ]]] = Field(None,
+                validation_alias=AliasChoices(
+                    "RNA purity 260-230 ratio",
+                    "RNA Purity 260-230 ratio",
+                    "RNA Purity 260-230 Ratio"
+                ),
+                serialization_alias="RNA purity 260-230 ratio",
+    )
     
     rna_integrity_number: Optional[Union[float, Literal[
         "not collected",
