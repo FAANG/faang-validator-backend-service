@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 import requests
 import asyncio
 import aiohttp
+from urllib.parse import quote
 import re
 from contextvars import ContextVar
 from app.validation.constants import SPECIES_BREED_LINKS, ALLOWED_RELATIONSHIPS, ELIXIR_VALIDATOR_URL
@@ -31,6 +32,23 @@ class ValidationResult(BaseModel):
     field_path: str
     value: Any = None
 
+
+def ontology_term_to_iri(term_id: str) -> str:
+    term = normalize_ontology_term(term_id)
+    if not term or ':' not in term:
+        return term
+
+    prefix, local_id = term.split(':', 1)
+    short_form = f"{prefix}_{local_id}"
+
+    if prefix.upper() == "EFO":
+        return f"http://www.ebi.ac.uk/efo/{short_form}"
+
+    return f"http://purl.obolibrary.org/obo/{short_form}"
+
+
+def double_urlencode(value: str) -> str:
+    return quote(quote(value, safe=""), safe="")
 
 # for elixir validation - might need to be removed
 def validate_term_against_classes(term_id: str, ontology_name: str,
@@ -138,22 +156,31 @@ class OntologyValidator:
         if self.cache_enabled and term_id in self._cache:
             return self._cache[term_id]
 
-        # During validation, we should not make blocking HTTP calls
-        # All terms should be pre-fetched. If not in cache, return empty
         if not allow_fetch:
             print(f"Warning: Term {term_id} not in cache and fetching disabled. This should have been pre-fetched.")
             return []
 
         try:
-            print(term_id)
-            url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
-            response = requests.get(url, timeout=50)
+            iri = ontology_term_to_iri(term_id)
+            encoded_iri = double_urlencode(iri)
+            exact_url = f"https://www.ebi.ac.uk/ols4/api/terms/findByIdAndIsDefiningOntology/{encoded_iri}"
+
+            response = requests.get(exact_url, timeout=50)
             response.raise_for_status()
             data = response.json()
 
-            docs = data.get('response', {}).get('docs', [])
+            docs = data.get("_embedded", {}).get("terms", [])
+
+            if not docs:
+                search_url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
+                response = requests.get(search_url, timeout=50)
+                response.raise_for_status()
+                data = response.json()
+                docs = data.get("response", {}).get("docs", [])
+
             if self.cache_enabled:
                 self._cache[term_id] = docs
+
             return docs
         except Exception as e:
             print(f"Error fetching from OLS: {e}")
@@ -164,15 +191,26 @@ class OntologyValidator:
             return term_id, self._cache[term_id]
 
         try:
-            url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=90)) as response:
+            iri = ontology_term_to_iri(term_id)
+            encoded_iri = double_urlencode(iri)
+            exact_url = f"https://www.ebi.ac.uk/ols4/api/terms/findByIdAndIsDefiningOntology/{encoded_iri}"
+
+            async with session.get(exact_url, timeout=aiohttp.ClientTimeout(total=90)) as response:
                 response.raise_for_status()
                 data = await response.json()
+                docs = data.get("_embedded", {}).get("terms", [])
 
-                docs = data.get('response', {}).get('docs', [])
-                if self.cache_enabled:
-                    self._cache[term_id] = docs
-                return term_id, docs
+            if not docs:
+                search_url = f"https://www.ebi.ac.uk/ols4/api/search?q={term_id}&rows=100"
+                async with session.get(search_url, timeout=aiohttp.ClientTimeout(total=90)) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    docs = data.get("response", {}).get("docs", [])
+
+            if self.cache_enabled:
+                self._cache[term_id] = docs
+
+            return term_id, docs
         except Exception as e:
             print(f"Error fetching from OLS for {term_id}: {e}")
             return term_id, []
