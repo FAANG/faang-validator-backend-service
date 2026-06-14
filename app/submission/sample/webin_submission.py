@@ -1,6 +1,8 @@
 import copy
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Callable
+
+from app.submission.retryable import RetryableSubmissionError
 import requests
 import json
 
@@ -65,11 +67,14 @@ class WebinBioSamplesSubmission:
         }
         return headers
 
-    def submit_records(self) -> Dict[str, str]:
+    def submit_records(self, progress_callback: Optional[Callable[[int, int], None]] = None,
+                       idempotency: Optional[Any] = None,
+                       raise_on_transient: bool = False) -> Dict[str, str]:
         biosamples_ids = dict()
         biosample_cache = dict()
 
-        print(f"Submitting {len(self.json_to_submit)} samples to BioSamples")
+        total = len(self.json_to_submit)
+        print(f"Submitting {total} samples to BioSamples")
 
         # create a copy as we need to delete relationships part from dict
         for item in self.json_to_submit:
@@ -78,6 +83,18 @@ class WebinBioSamplesSubmission:
                 if key != 'relationships':
                     tmp[key] = value
             name = tmp['name']
+
+            # Idempotency guard: if this alias was already submitted in a prior
+            # attempt of this job (worker crash / retry), reuse its accession and
+            # skip the POST so we don't create a duplicate BioSample.
+            if idempotency is not None:
+                prior_accession = idempotency.seen(name)
+                if prior_accession is not None:
+                    biosamples_ids[name] = prior_accession
+                    print(f"Skipping already-submitted sample {name}: {prior_accession}")
+                    if progress_callback is not None:
+                        progress_callback(len(biosamples_ids), total)
+                    continue
 
             # get organism from parent for pool of specimens (BioSamples now requires it)
             self.get_organism_from_parent(tmp, item.get('relationships', []), biosample_cache)
@@ -98,6 +115,17 @@ class WebinBioSamplesSubmission:
                     error_msg = create_submission_response.text[:500] if create_submission_response.text else f"Status code: {create_submission_response.status_code}"
 
                 print(f"Failed to submit sample {name}: Status {create_submission_response.status_code}, Details: {error_msg}")
+
+                # An upstream 5xx is transient — BioSamples is having a moment.
+                # In a background task, raise so Celery retries (already-submitted
+                # samples are skipped by the idempotency guard). A 4xx is a real
+                # rejection and is returned as a permanent error below.
+                if raise_on_transient and create_submission_response.status_code >= 500:
+                    raise RetryableSubmissionError(
+                        f"BioSamples returned {create_submission_response.status_code} "
+                        f"for sample {name}: {error_msg}"
+                    )
+
                 return {
                     'Error': (
                         f'Failed to submit sample {name}. '
@@ -115,6 +143,14 @@ class WebinBioSamplesSubmission:
             biosamples_ids[name] = create_submission_response.json()[
                 'accession']
             print(f"Successfully submitted sample {name}: {biosamples_ids[name]}")
+
+            # Durably record success *immediately* so a crash on the next sample
+            # doesn't cause this one to be re-submitted on retry.
+            if idempotency is not None:
+                idempotency.record(name, biosamples_ids[name])
+
+            if progress_callback is not None:
+                progress_callback(len(biosamples_ids), total)
 
         # update relationship part of records
         for item in self.json_to_submit:
@@ -201,9 +237,10 @@ class WebinBioSamplesSubmission:
                 print(f"Inherited '{field}' from parent {parent_id} for pool '{tmp.get('name')}'")
 
 
-    def update_records(self) -> Dict[str, str]:
+    def update_records(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> Dict[str, str]:
         updated_biosamples_ids = dict()
 
+        total = len(self.json_to_submit)
         for item in self.json_to_submit:
             tmp = dict()
             for key, value in item.items():
@@ -271,6 +308,9 @@ class WebinBioSamplesSubmission:
 
                 updated_biosamples_ids[accession] = update_submission_response.json()[
                     'name']
+
+                if progress_callback is not None:
+                    progress_callback(len(updated_biosamples_ids), total)
 
         reverted_updated_biosamples_ids = dict((v, k) for k, v in updated_biosamples_ids.items())
         return reverted_updated_biosamples_ids

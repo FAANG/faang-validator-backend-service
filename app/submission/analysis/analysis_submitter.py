@@ -10,6 +10,7 @@ from lxml import etree
 from app.conversions.generate_analysis_and_submission_xml import get_xml_files
 from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
 from app.tracking.submission_tracker import save_submission_data
+from app.submission.retryable import RetryableSubmissionError, TRANSIENT_CURL_EXIT_CODES
 
 
 def _parse_submission_results(submission_results) -> tuple:
@@ -74,7 +75,8 @@ class AnalysisSubmitter:
 
         return get_xml_files(prepared_data, submission_id, action=action)
 
-    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[
+    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission",
+                      raise_on_transient: bool = False) -> Dict[
         str, Any]:
         try:
             submission_id = str(uuid.uuid4())
@@ -120,6 +122,14 @@ class AnalysisSubmitter:
                 capture_output=True
             )
 
+            # curl couldn't reach ENA (connect/timeout/etc.) — the submission
+            # never landed, so it's safe to retry. In a background task, raise
+            # so Celery retries; the sync path falls through and reports failure.
+            if raise_on_transient and submit_to_ena_process.returncode in TRANSIENT_CURL_EXIT_CODES:
+                raise RetryableSubmissionError(
+                    f"curl exit {submit_to_ena_process.returncode} submitting analysis to ENA"
+                )
+
             # parse results
             submission_results = submit_to_ena_process.stdout
             success, error_messages, info_messages = _parse_submission_results(submission_results)
@@ -160,6 +170,9 @@ class AnalysisSubmitter:
                     'info_messages': info_messages
                 }
 
+        except RetryableSubmissionError:
+            # Let transient failures propagate so the background task retries.
+            raise
         except Exception as e:
             print(f"Error during ENA submission: {str(e)}")
             traceback.print_exc()
