@@ -700,7 +700,7 @@ class BioSampleSubmitter:
             # BioSamples public API endpoint
             # api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
             if mode == 'test':
-                api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
+                api_url = f"https://wwwdev.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
             else:
                 api_url = f"https://www.ebi.ac.uk/biosamples/samples/{biosample_id}.json"
 
