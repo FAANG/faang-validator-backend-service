@@ -182,10 +182,14 @@ def generate_experiment_xml(json_data: Dict[str, Any], output_filename: Optional
             
             # Library layout
             library_layout_elt = etree.SubElement(library_descriptor_elt, 'LIBRARY_LAYOUT')
-            if nominal_length and str(nominal_length).strip() and nominal_length != "":
+            # NOMINAL_LENGTH (and NOMINAL_SDEV) are only allowed on PAIRED in the
+            # ENA SRA schema. Attaching it to SINGLE is rejected with
+            # "Attribute not allowed: NOMINAL_LENGTH in element SINGLE".
+            is_paired = str(library_layout).strip().upper() == 'PAIRED'
+            if is_paired and nominal_length and str(nominal_length).strip() and nominal_length != "":
                 try:
                     nominal_length_int = int(float(nominal_length))
-                    etree.SubElement(library_layout_elt, library_layout, 
+                    etree.SubElement(library_layout_elt, library_layout,
                                    NOMINAL_LENGTH=str(nominal_length_int))
                 except (ValueError, TypeError):
                     etree.SubElement(library_layout_elt, library_layout)
