@@ -1,8 +1,10 @@
 import copy
+import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
 
 from app.submission.retryable import RetryableSubmissionError
+from app.submission.rate_limit import RateLimiter, request_with_retry
 import requests
 import json
 
@@ -12,6 +14,8 @@ from app.validation.constants import (
     SUBMISSION_TEST_SERVER,
     SUBMISSION_PROD_SERVER
 )
+
+_TOKEN_REFRESH_SECONDS = 240
 
 
 class WebinBioSamplesSubmission:
@@ -31,11 +35,16 @@ class WebinBioSamplesSubmission:
         else:
             raise ValueError(f"Invalid mode: {mode}. Must be 'test' or 'prod'")
 
-    def get_token(self) -> str:
-        """
-        This function will return token to be used upon every request to server
-        :return: token as a string object
-        """
+        self._limiter = RateLimiter()
+        self._token = None
+        self._token_fetched_at = 0.0
+
+    def get_token(self, force_refresh: bool = False) -> str:
+        now = time.monotonic()
+        if (not force_refresh and self._token is not None
+                and (now - self._token_fetched_at) < _TOKEN_REFRESH_SECONDS):
+            return self._token
+
         url = f"{self.webin_server}/token?ttl=5"
 
         headers = {
@@ -51,8 +60,10 @@ class WebinBioSamplesSubmission:
             "username": self.username
         }
 
-        response = requests.post(url, headers=headers, json=data)
-        return response.text
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        self._token = response.text
+        self._token_fetched_at = now
+        return self._token
 
     def get_header(self) -> Dict[str, str]:
         """
@@ -101,10 +112,14 @@ class WebinBioSamplesSubmission:
 
             tmp_json = json.dumps(tmp)
 
-            create_submission_response = requests.post(
+            create_submission_response = request_with_retry(
+                "POST",
                 f"{self.submission_server}/biosamples/samples",
-                headers=self.get_header(),
-                data=tmp_json)
+                limiter=self._limiter,
+                headers_provider=self.get_header,
+                data=tmp_json,
+                raise_on_transient=raise_on_transient,
+            )
 
             if create_submission_response.status_code != 201:
                 error_msg = 'Unknown error'
@@ -168,10 +183,14 @@ class WebinBioSamplesSubmission:
                 item['accession'] = id
                 item = json.dumps(item)
 
-                create_submission_response = requests.put(
+                create_submission_response = request_with_retry(
+                    "PUT",
                     f"{self.submission_server}/biosamples/samples/{id}",
-                    headers=self.get_header(),
-                    data=item)
+                    limiter=self._limiter,
+                    headers_provider=self.get_header,
+                    data=item,
+                    raise_on_transient=raise_on_transient,
+                )
 
                 if create_submission_response.status_code != 200:
                     error_msg = 'Unknown error'
@@ -288,10 +307,13 @@ class WebinBioSamplesSubmission:
                     updated_biosample_entry['relationships'] = tmp['relationships']
                 updated_json = json.dumps(updated_biosample_entry)
 
-                update_submission_response = requests.put(
+                update_submission_response = request_with_retry(
+                    "PUT",
                     f"{self.submission_server}/biosamples/samples/{accession}",
-                    headers=self.get_header(),
-                    data=updated_json)
+                    limiter=self._limiter,
+                    headers_provider=self.get_header,
+                    data=updated_json,
+                )
 
                 if update_submission_response.status_code != 200:
                     try:
