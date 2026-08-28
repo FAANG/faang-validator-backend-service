@@ -44,10 +44,10 @@ def submit_biosamples_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Submit (or update) a batch of samples to BioSamples in the background."""
     self.update_state(state="STARTED", meta={"stage": "preparing", "submitted": 0})
 
-    def _progress(submitted: int, total: int) -> None:
+    def _progress(done: int, total: int, stage: str = "submitting") -> None:
         self.update_state(
             state="STARTED",
-            meta={"stage": "submitting", "submitted": submitted, "total": total},
+            meta={"stage": stage, "submitted": done, "total": total},
         )
 
     from app.submission import BioSampleSubmitter

@@ -168,6 +168,14 @@ class WebinBioSamplesSubmission:
                 progress_callback(len(biosamples_ids), total)
 
         # update relationship part of records
+        rel_total = sum(
+            1 for rel_item in self.json_to_submit
+            if ('relationships' in rel_item and len(rel_item['relationships']) > 0
+                and rel_item['relationships'][0]['target'] != 'restricted access')
+        )
+        rel_done = 0
+        if progress_callback is not None and rel_total:
+            progress_callback(0, rel_total, "relationships")
         for item in self.json_to_submit:
             if ('relationships' in item and len(item['relationships']) > 0
                 and item['relationships'][0]['target'] != 'restricted access'):
@@ -204,6 +212,10 @@ class WebinBioSamplesSubmission:
                                      f'Status: {create_submission_response.status_code}. '
                                      f'Details: {error_msg}. '
                                      'Please contact faang-dcc@ebi.ac.uk'}
+
+                rel_done += 1
+                if progress_callback is not None:
+                    progress_callback(rel_done, rel_total, "relationships")
 
         return biosamples_ids
 
