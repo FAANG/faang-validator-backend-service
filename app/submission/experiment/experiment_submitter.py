@@ -1,16 +1,22 @@
 import os
 import uuid
-import subprocess
 import copy
-import re
 import traceback
 from typing import Dict, Any, Optional
+
+import requests
 from lxml import etree
 
 from app.conversions.generate_experiment_xmls import get_xml_files
 from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
 from app.tracking.submission_tracker import save_submission_data
 from app.submission.retryable import RetryableSubmissionError, TRANSIENT_CURL_EXIT_CODES
+
+
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file's contents as bytes (used to build multipart upload parts)."""
+    with open(path, 'rb') as fh:
+        return fh.read()
 
 
 def _parse_submission_results(submission_results) -> tuple:
@@ -111,19 +117,26 @@ class ExperimentSubmitter:
             # Get credentials
             username = credentials["username"]
             password = credentials["password"]
-            password_escaped = re.escape(password)
 
-            # Submit to ENA using curl
+            # Submit to ENA via an HTTP multipart POST. Credentials are passed
+            # through requests' HTTP basic auth and the XML payloads as form
+            # files. This avoids spawning a shell (no command injection) and
+            # keeps the password off any process command line.
             print(f"Submitting to ENA: {submission_path}")
-            submit_to_ena_process = subprocess.run(
-                f'curl -u {username}:{password_escaped} '
-                f'-F "SUBMISSION=@{submission_xml}" '
-                f'-F "EXPERIMENT=@{experiment_xml}" '
-                f'-F "RUN=@{run_xml}" '
-                f'-F "STUDY=@{study_xml}" '
-                f'"{submission_path}"',
-                shell=True,
-                capture_output=True
+            files = {
+                'SUBMISSION': (os.path.basename(submission_xml),
+                               _read_file_bytes(submission_xml), 'application/xml'),
+                'EXPERIMENT': (os.path.basename(experiment_xml),
+                               _read_file_bytes(experiment_xml), 'application/xml'),
+                'RUN': (os.path.basename(run_xml),
+                        _read_file_bytes(run_xml), 'application/xml'),
+                'STUDY': (os.path.basename(study_xml),
+                          _read_file_bytes(study_xml), 'application/xml'),
+            }
+            ena_response = requests.post(
+                submission_path,
+                auth=(username, password),
+                files=files,
             )
 
             # curl couldn't reach ENA (connect/timeout/etc.) — the submission
@@ -135,7 +148,7 @@ class ExperimentSubmitter:
                 )
 
             # Parse results
-            submission_results = submit_to_ena_process.stdout
+            submission_results = ena_response.content
             success, error_messages, info_messages = _parse_submission_results(submission_results)
             result_str = submission_results.decode('utf-8')
 
