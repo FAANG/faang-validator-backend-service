@@ -1,0 +1,35 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: validation-v2-stripprefix
+  namespace: default
+spec:
+  stripPrefix:
+    prefixes:
+      - /validation-v2
+---
+# New backend exposed at https://api.faang.org/validation-v2
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: validation-v2-ingress
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: default-validation-v2-stripprefix@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: api.faang.org
+    http:
+      paths:
+      - path: /validation-v2
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-validation-service
+            port:
+              number: 8000
+  tls:
+  - hosts:
+    - api.faang.org
+    secretName: tls-secret2
