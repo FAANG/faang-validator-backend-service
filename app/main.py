@@ -152,8 +152,6 @@ def normalize_run_record(record: dict) -> dict:
 
 
 def prepare_analysis_results(validation_results: Dict[str, Any], original_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Merge the submission sheet from the original upload into the validation
-    results so the submitter has everything it needs. Pure dict work, no I/O."""
     prepared_results = dict(validation_results)
 
     if 'submission' in original_data:
@@ -170,8 +168,6 @@ def prepare_analysis_results(validation_results: Dict[str, Any], original_data: 
 
 
 def prepare_experiment_results(validation_results: Dict[str, Any], original_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Merge the ENA-specific sheets (experiment ena / run / study / submission)
-    from the original upload into the validation results. Pure dict work, no I/O."""
     prepared_results = dict(validation_results)
 
     if 'experiment ena' in original_data:
@@ -714,10 +710,6 @@ def get_submission_job(job_id: str):
     info = result.info  # progress meta (running) or return value (complete)
 
     if result.state == "SUCCESS":
-        # The task ran without crashing, but the *submission* may still have
-        # failed (e.g. a 4xx rejection from ENA/BioSamples is returned as a dict
-        # with success=False, not raised). Surface that as a failed job rather
-        # than reporting "complete" for a submission that didn't go through.
         payload = info if isinstance(info, dict) else {"result": info}
         response.result = payload
         response.message = payload.get("message")

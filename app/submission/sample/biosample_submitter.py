@@ -1035,10 +1035,6 @@ class BioSampleSubmitter:
             }
 
         except RETRYABLE_EXCEPTIONS as e:
-            # Transient failure (connection drop / timeout / upstream 5xx). In a
-            # background task we let this propagate so Celery retries it — the
-            # idempotency guard makes the retry skip already-submitted samples.
-            # In the synchronous path we keep the old behaviour (return a dict).
             if raise_on_transient:
                 print(f"Transient error submitting to BioSamples, will retry: {str(e)}")
                 raise

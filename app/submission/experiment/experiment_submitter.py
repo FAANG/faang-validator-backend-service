@@ -139,9 +139,6 @@ class ExperimentSubmitter:
                 files=files,
             )
 
-            # curl couldn't reach ENA (connect/timeout/etc.) — the submission
-            # never landed, so it's safe to retry. In a background task, raise
-            # so Celery retries; the sync path falls through and reports failure.
             if raise_on_transient and submit_to_ena_process.returncode in TRANSIENT_CURL_EXIT_CODES:
                 raise RetryableSubmissionError(
                     f"curl exit {submit_to_ena_process.returncode} submitting experiment to ENA"
@@ -171,8 +168,7 @@ class ExperimentSubmitter:
                     action=action,
                 )
 
-            # Cleanup XML files (runs AFTER tracking so the experiment
-            # XML is still on disk when the tracker needs it).
+            # Cleanup XML files
             self._cleanup_xml_files(
                 [experiment_xml, run_xml, study_xml, submission_xml]
             )
@@ -196,7 +192,6 @@ class ExperimentSubmitter:
                 }
 
         except RetryableSubmissionError:
-            # Let transient failures propagate so the background task retries.
             raise
         except Exception as e:
             print(f"Error during ENA submission: {str(e)}")
