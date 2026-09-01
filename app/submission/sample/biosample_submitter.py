@@ -1,11 +1,12 @@
 from datetime import datetime
-from typing import Dict, List, Any, Optional, get_args, get_origin, Union
+from typing import Dict, List, Any, Optional, get_args, get_origin, Union, Callable
 import requests
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from app.submission.sample.webin_submission import WebinBioSamplesSubmission
 from app.submission.sample.ena_required_fields import collect_ena_required_fields
+from app.submission.retryable import RETRYABLE_EXCEPTIONS, RetryableSubmissionError
 
 
 def _reconstruct_model_from_dict(model_class: type[BaseModel], data: dict) -> BaseModel:
@@ -842,7 +843,10 @@ class BioSampleSubmitter:
         mode: str = 'test',
         person_data: Optional[Dict[str, Any]] = None,
         organization_data: Optional[Dict[str, Any]] = None,
-        update_existing: bool = False
+        update_existing: bool = False,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+        idempotency: Optional[Any] = None,
+        raise_on_transient: bool = False
     ) -> Dict[str, Any]:
         try:
             # Print validation summary
@@ -1002,9 +1006,11 @@ class BioSampleSubmitter:
             )
 
             if update_existing:
-                biosamples_response = submission.update_records()
+                biosamples_response = submission.update_records(progress_callback=progress_callback)
             else:
-                biosamples_response = submission.submit_records()
+                biosamples_response = submission.submit_records(
+                    progress_callback=progress_callback, idempotency=idempotency,
+                    raise_on_transient=raise_on_transient)
 
             if isinstance(biosamples_response, dict) and 'Error' in biosamples_response:
                 partial_ids = biosamples_response.get('biosamples_ids', {}) or {}
@@ -1028,6 +1034,21 @@ class BioSampleSubmitter:
                 'errors': []
             }
 
+        except RETRYABLE_EXCEPTIONS as e:
+            # Transient failure (connection drop / timeout / upstream 5xx). In a
+            # background task we let this propagate so Celery retries it — the
+            # idempotency guard makes the retry skip already-submitted samples.
+            # In the synchronous path we keep the old behaviour (return a dict).
+            if raise_on_transient:
+                print(f"Transient error submitting to BioSamples, will retry: {str(e)}")
+                raise
+            print(f"Unexpected error submitting to BioSamples: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'biosamples_ids': {},
+                'errors': [str(e)]
+            }
         except Exception as e:
             print(f"Unexpected error submitting to BioSamples: {str(e)}")
             return {

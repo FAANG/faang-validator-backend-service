@@ -1,6 +1,10 @@
 import copy
+import time
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Callable
+
+from app.submission.retryable import RetryableSubmissionError
+from app.submission.rate_limit import RateLimiter, request_with_retry
 import requests
 import json
 
@@ -10,6 +14,8 @@ from app.validation.constants import (
     SUBMISSION_TEST_SERVER,
     SUBMISSION_PROD_SERVER
 )
+
+_TOKEN_REFRESH_SECONDS = 240
 
 
 class WebinBioSamplesSubmission:
@@ -29,11 +35,16 @@ class WebinBioSamplesSubmission:
         else:
             raise ValueError(f"Invalid mode: {mode}. Must be 'test' or 'prod'")
 
-    def get_token(self) -> str:
-        """
-        This function will return token to be used upon every request to server
-        :return: token as a string object
-        """
+        self._limiter = RateLimiter()
+        self._token = None
+        self._token_fetched_at = 0.0
+
+    def get_token(self, force_refresh: bool = False) -> str:
+        now = time.monotonic()
+        if (not force_refresh and self._token is not None
+                and (now - self._token_fetched_at) < _TOKEN_REFRESH_SECONDS):
+            return self._token
+
         url = f"{self.webin_server}/token?ttl=5"
 
         headers = {
@@ -49,8 +60,10 @@ class WebinBioSamplesSubmission:
             "username": self.username
         }
 
-        response = requests.post(url, headers=headers, json=data)
-        return response.text
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        self._token = response.text
+        self._token_fetched_at = now
+        return self._token
 
     def get_header(self) -> Dict[str, str]:
         """
@@ -65,11 +78,14 @@ class WebinBioSamplesSubmission:
         }
         return headers
 
-    def submit_records(self) -> Dict[str, str]:
+    def submit_records(self, progress_callback: Optional[Callable[[int, int], None]] = None,
+                       idempotency: Optional[Any] = None,
+                       raise_on_transient: bool = False) -> Dict[str, str]:
         biosamples_ids = dict()
         biosample_cache = dict()
 
-        print(f"Submitting {len(self.json_to_submit)} samples to BioSamples")
+        total = len(self.json_to_submit)
+        print(f"Submitting {total} samples to BioSamples")
 
         # create a copy as we need to delete relationships part from dict
         for item in self.json_to_submit:
@@ -79,15 +95,31 @@ class WebinBioSamplesSubmission:
                     tmp[key] = value
             name = tmp['name']
 
+            # Idempotency guard: if this alias was already submitted in a prior
+            # attempt of this job (worker crash / retry), reuse its accession and
+            # skip the POST so we don't create a duplicate BioSample.
+            if idempotency is not None:
+                prior_accession = idempotency.seen(name)
+                if prior_accession is not None:
+                    biosamples_ids[name] = prior_accession
+                    print(f"Skipping already-submitted sample {name}: {prior_accession}")
+                    if progress_callback is not None:
+                        progress_callback(len(biosamples_ids), total)
+                    continue
+
             # get organism from parent for pool of specimens (BioSamples now requires it)
             self.get_organism_from_parent(tmp, item.get('relationships', []), biosample_cache)
 
             tmp_json = json.dumps(tmp)
 
-            create_submission_response = requests.post(
+            create_submission_response = request_with_retry(
+                "POST",
                 f"{self.submission_server}/biosamples/samples",
-                headers=self.get_header(),
-                data=tmp_json)
+                limiter=self._limiter,
+                headers_provider=self.get_header,
+                data=tmp_json,
+                raise_on_transient=raise_on_transient,
+            )
 
             if create_submission_response.status_code != 201:
                 error_msg = 'Unknown error'
@@ -98,6 +130,17 @@ class WebinBioSamplesSubmission:
                     error_msg = create_submission_response.text[:500] if create_submission_response.text else f"Status code: {create_submission_response.status_code}"
 
                 print(f"Failed to submit sample {name}: Status {create_submission_response.status_code}, Details: {error_msg}")
+
+                # An upstream 5xx is transient — BioSamples is having a moment.
+                # In a background task, raise so Celery retries (already-submitted
+                # samples are skipped by the idempotency guard). A 4xx is a real
+                # rejection and is returned as a permanent error below.
+                if raise_on_transient and create_submission_response.status_code >= 500:
+                    raise RetryableSubmissionError(
+                        f"BioSamples returned {create_submission_response.status_code} "
+                        f"for sample {name}: {error_msg}"
+                    )
+
                 return {
                     'Error': (
                         f'Failed to submit sample {name}. '
@@ -116,7 +159,23 @@ class WebinBioSamplesSubmission:
                 'accession']
             print(f"Successfully submitted sample {name}: {biosamples_ids[name]}")
 
+            # Durably record success *immediately* so a crash on the next sample
+            # doesn't cause this one to be re-submitted on retry.
+            if idempotency is not None:
+                idempotency.record(name, biosamples_ids[name])
+
+            if progress_callback is not None:
+                progress_callback(len(biosamples_ids), total)
+
         # update relationship part of records
+        rel_total = sum(
+            1 for rel_item in self.json_to_submit
+            if ('relationships' in rel_item and len(rel_item['relationships']) > 0
+                and rel_item['relationships'][0]['target'] != 'restricted access')
+        )
+        rel_done = 0
+        if progress_callback is not None and rel_total:
+            progress_callback(0, rel_total, "relationships")
         for item in self.json_to_submit:
             if ('relationships' in item and len(item['relationships']) > 0
                 and item['relationships'][0]['target'] != 'restricted access'):
@@ -132,10 +191,14 @@ class WebinBioSamplesSubmission:
                 item['accession'] = id
                 item = json.dumps(item)
 
-                create_submission_response = requests.put(
+                create_submission_response = request_with_retry(
+                    "PUT",
                     f"{self.submission_server}/biosamples/samples/{id}",
-                    headers=self.get_header(),
-                    data=item)
+                    limiter=self._limiter,
+                    headers_provider=self.get_header,
+                    data=item,
+                    raise_on_transient=raise_on_transient,
+                )
 
                 if create_submission_response.status_code != 200:
                     error_msg = 'Unknown error'
@@ -149,6 +212,10 @@ class WebinBioSamplesSubmission:
                                      f'Status: {create_submission_response.status_code}. '
                                      f'Details: {error_msg}. '
                                      'Please contact faang-dcc@ebi.ac.uk'}
+
+                rel_done += 1
+                if progress_callback is not None:
+                    progress_callback(rel_done, rel_total, "relationships")
 
         return biosamples_ids
 
@@ -201,9 +268,10 @@ class WebinBioSamplesSubmission:
                 print(f"Inherited '{field}' from parent {parent_id} for pool '{tmp.get('name')}'")
 
 
-    def update_records(self) -> Dict[str, str]:
+    def update_records(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> Dict[str, str]:
         updated_biosamples_ids = dict()
 
+        total = len(self.json_to_submit)
         for item in self.json_to_submit:
             tmp = dict()
             for key, value in item.items():
@@ -251,10 +319,13 @@ class WebinBioSamplesSubmission:
                     updated_biosample_entry['relationships'] = tmp['relationships']
                 updated_json = json.dumps(updated_biosample_entry)
 
-                update_submission_response = requests.put(
+                update_submission_response = request_with_retry(
+                    "PUT",
                     f"{self.submission_server}/biosamples/samples/{accession}",
-                    headers=self.get_header(),
-                    data=updated_json)
+                    limiter=self._limiter,
+                    headers_provider=self.get_header,
+                    data=updated_json,
+                )
 
                 if update_submission_response.status_code != 200:
                     try:
@@ -271,6 +342,9 @@ class WebinBioSamplesSubmission:
 
                 updated_biosamples_ids[accession] = update_submission_response.json()[
                     'name']
+
+                if progress_callback is not None:
+                    progress_callback(len(updated_biosamples_ids), total)
 
         reverted_updated_biosamples_ids = dict((v, k) for k, v in updated_biosamples_ids.items())
         return reverted_updated_biosamples_ids

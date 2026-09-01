@@ -3,10 +3,18 @@ from pydantic import BaseModel
 from typing import Dict, List, Any, Optional, Literal
 import traceback
 
+from celery.result import AsyncResult
+
 from app.conversions.file_processor import parse_contents_api
 from app.profiler import cprofiled
 from app.validation.unified_validator import UnifiedFAANGValidator
 from app.submission import BioSampleSubmitter, ExperimentSubmitter, AnalysisSubmitter
+from app.celery_app import celery_app
+from app.tasks import (
+    submit_biosamples_task,
+    submit_experiment_task,
+    submit_analysis_task,
+)
 
 app = FastAPI(
     title="FAANG Validation API",
@@ -92,6 +100,24 @@ class ExperimentSubmissionResponse(BaseModel):
     info_messages: Optional[List[str]] = None
 
 
+class JobAcceptedResponse(BaseModel):
+    job_id: str
+    status: str = "queued"
+    message: str
+
+
+class SubmissionJobStatusResponse(BaseModel):
+    job_id: str
+    status: str  # queued | running | retrying | complete | failed
+    submitted: Optional[int] = None
+    total: Optional[int] = None
+    stage: Optional[str] = None
+    message: Optional[str] = None
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    errors: Optional[List[str]] = None
+
+
 def normalize_experiment_ena_record(record: dict) -> dict:
     normalized = {}
     for key, value in record.items():
@@ -123,6 +149,65 @@ def normalize_run_record(record: dict) -> dict:
         normalized[normalized_key] = value
 
     return normalized
+
+
+def prepare_analysis_results(validation_results: Dict[str, Any], original_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge the submission sheet from the original upload into the validation
+    results so the submitter has everything it needs. Pure dict work, no I/O."""
+    prepared_results = dict(validation_results)
+
+    if 'submission' in original_data:
+        prepared_results.setdefault('metadata_results', {})
+        prepared_results['metadata_results'].setdefault('submission', {'valid': [], 'invalid': []})
+        for record in original_data['submission']:
+            prepared_results['metadata_results']['submission']['valid'].append({
+                'model': record,
+                'data': record
+            })
+        print(f"Added {len(original_data['submission'])} submission records")
+
+    return prepared_results
+
+
+def prepare_experiment_results(validation_results: Dict[str, Any], original_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge the ENA-specific sheets (experiment ena / run / study / submission)
+    from the original upload into the validation results. Pure dict work, no I/O."""
+    prepared_results = dict(validation_results)
+
+    if 'experiment ena' in original_data:
+        prepared_results.setdefault('experiment_results', {})
+        prepared_results['experiment_results'].setdefault('experiment ena', {'valid': [], 'invalid': []})
+        for record in original_data['experiment ena']:
+            normalized_record = normalize_experiment_ena_record(record)
+            prepared_results['experiment_results']['experiment ena']['valid'].append({
+                'model': normalized_record,
+                'data': normalized_record
+            })
+        print(f"Added {len(original_data['experiment ena'])} experiment ena records")
+
+    if 'run' in original_data:
+        prepared_results.setdefault('metadata_results', {})
+        prepared_results['metadata_results'].setdefault('run', {'valid': [], 'invalid': []})
+        for record in original_data['run']:
+            normalized_record = normalize_run_record(record)
+            prepared_results['metadata_results']['run']['valid'].append({
+                'model': normalized_record,
+                'data': normalized_record
+            })
+        print(f"Added {len(original_data['run'])} run records")
+
+    for sheet in ('study', 'submission'):
+        if sheet in original_data:
+            prepared_results.setdefault('metadata_results', {})
+            prepared_results['metadata_results'].setdefault(sheet, {'valid': [], 'invalid': []})
+            for record in original_data[sheet]:
+                prepared_results['metadata_results'][sheet]['valid'].append({
+                    'model': record,
+                    'data': record
+                })
+            print(f"Added {len(original_data[sheet])} {sheet} records")
+
+    return prepared_results
 
 
 # Health check endpoint
@@ -372,21 +457,7 @@ def submit_analysis(request: AnalysisSubmissionRequest):
 
         print(f"Preparing analysis submission: mode={request.mode}, action={request.action}")
 
-        prepared_results = dict(request.validation_results)
-
-        # add submission records
-        if 'submission' in request.original_data:
-            if 'metadata_results' not in prepared_results:
-                prepared_results['metadata_results'] = {}
-            if 'submission' not in prepared_results['metadata_results']:
-                prepared_results['metadata_results']['submission'] = {'valid': [], 'invalid': []}
-
-            for record in request.original_data['submission']:
-                prepared_results['metadata_results']['submission']['valid'].append({
-                    'model': record,
-                    'data': record
-                })
-            print(f"Added {len(request.original_data['submission'])} submission records")
+        prepared_results = prepare_analysis_results(request.validation_results, request.original_data)
 
         credentials = {
             "username": request.webin_username,
@@ -455,65 +526,7 @@ def submit_experiment(request: ExperimentSubmissionRequest):
         print(f"Preparing experiment submission: mode={request.mode}, action={request.action}")
 
         # Prepare the results by adding ENA-specific sheets from original data
-        prepared_results = dict(request.validation_results)
-
-        # Add experiment ena records
-        if 'experiment ena' in request.original_data:
-            if 'experiment_results' not in prepared_results:
-                prepared_results['experiment_results'] = {}
-            if 'experiment ena' not in prepared_results['experiment_results']:
-                prepared_results['experiment_results']['experiment ena'] = {'valid': [], 'invalid': []}
-
-            for record in request.original_data['experiment ena']:
-                normalized_record = normalize_experiment_ena_record(record)
-                prepared_results['experiment_results']['experiment ena']['valid'].append({
-                    'model': normalized_record,
-                    'data': normalized_record
-                })
-            print(f"Added {len(request.original_data['experiment ena'])} experiment ena records")
-
-        # Add run records
-        if 'run' in request.original_data:
-            if 'metadata_results' not in prepared_results:
-                prepared_results['metadata_results'] = {}
-            if 'run' not in prepared_results['metadata_results']:
-                prepared_results['metadata_results']['run'] = {'valid': [], 'invalid': []}
-
-            for record in request.original_data['run']:
-                normalized_record = normalize_run_record(record)
-                prepared_results['metadata_results']['run']['valid'].append({
-                    'model': normalized_record,
-                    'data': normalized_record
-                })
-            print(f"Added {len(request.original_data['run'])} run records")
-
-        # Add study records
-        if 'study' in request.original_data:
-            if 'metadata_results' not in prepared_results:
-                prepared_results['metadata_results'] = {}
-            if 'study' not in prepared_results['metadata_results']:
-                prepared_results['metadata_results']['study'] = {'valid': [], 'invalid': []}
-
-            for record in request.original_data['study']:
-                prepared_results['metadata_results']['study']['valid'].append({
-                    'model': record,
-                    'data': record
-                })
-            print(f"Added {len(request.original_data['study'])} study records")
-
-        # Add submission records
-        if 'submission' in request.original_data:
-            if 'metadata_results' not in prepared_results:
-                prepared_results['metadata_results'] = {}
-            if 'submission' not in prepared_results['metadata_results']:
-                prepared_results['metadata_results']['submission'] = {'valid': [], 'invalid': []}
-
-            for record in request.original_data['submission']:
-                prepared_results['metadata_results']['submission']['valid'].append({
-                    'model': record,
-                    'data': record
-                })
-            print(f"Added {len(request.original_data['submission'])} submission records")
+        prepared_results = prepare_experiment_results(request.validation_results, request.original_data)
 
         # Prepare credentials
         credentials = {
@@ -610,6 +623,120 @@ async def validate_data(request: ValidationDataRequest):
             "results": results,
             "report": report
         }
+
+
+# ---------------------------------------------------------------------------
+# Background (durable) submission endpoints
+#
+# These enqueue the long, state-changing submission work onto Celery/Redis and
+# return immediately with a job_id. The validation path stays fully in FastAPI;
+# only submission moves to a worker so large batches survive timeouts/restarts,
+# get retried on transient ENA/BioSamples failures, and report progress.
+# ---------------------------------------------------------------------------
+
+# Celery state -> our public status vocabulary.
+_STATUS_MAP = {
+    "PENDING": "queued",
+    "RECEIVED": "queued",
+    "STARTED": "running",
+    "RETRY": "retrying",
+    "SUCCESS": "complete",
+    "FAILURE": "failed",
+    "REVOKED": "failed",
+}
+
+
+@app.post("/submit-to-biosamples-async", response_model=JobAcceptedResponse)
+def submit_to_biosamples_async(request: SubmissionRequest):
+    if request.mode not in ['test', 'prod']:
+        raise HTTPException(status_code=400, detail="Mode must be 'test' or 'prod'")
+
+    task = submit_biosamples_task.delay({
+        "validation_results": request.validation_results,
+        "webin_username": request.webin_username,
+        "webin_password": request.webin_password,
+        "domain": request.domain,
+        "mode": request.mode,
+        "update_existing": request.update_existing,
+    })
+    return JobAcceptedResponse(
+        job_id=task.id,
+        message="Submission queued. Poll GET /submission-jobs/{job_id} for progress.",
+    )
+
+
+@app.post("/submit-experiment-async", response_model=JobAcceptedResponse)
+def submit_experiment_async(request: ExperimentSubmissionRequest):
+    if request.mode not in ["test", "prod"]:
+        raise HTTPException(status_code=400, detail="Mode must be 'test' or 'prod'")
+    if request.action not in ["submission", "update"]:
+        raise HTTPException(status_code=400, detail="Action must be 'submission' or 'update'")
+
+    prepared_results = prepare_experiment_results(request.validation_results, request.original_data)
+    credentials = {
+        "username": request.webin_username,
+        "password": request.webin_password,
+        "mode": request.mode,
+    }
+    task = submit_experiment_task.delay(prepared_results, credentials, request.action)
+    return JobAcceptedResponse(
+        job_id=task.id,
+        message="Experiment submission queued. Poll GET /submission-jobs/{job_id} for progress.",
+    )
+
+
+@app.post("/submit-analysis-async", response_model=JobAcceptedResponse)
+def submit_analysis_async(request: AnalysisSubmissionRequest):
+    if request.mode not in ["test", "prod"]:
+        raise HTTPException(status_code=400, detail="Mode must be 'test' or 'prod'")
+    if request.action not in ["submission", "update"]:
+        raise HTTPException(status_code=400, detail="Action must be 'submission' or 'update'")
+
+    prepared_results = prepare_analysis_results(request.validation_results, request.original_data)
+    credentials = {
+        "username": request.webin_username,
+        "password": request.webin_password,
+        "mode": request.mode,
+    }
+    task = submit_analysis_task.delay(prepared_results, credentials, request.action)
+    return JobAcceptedResponse(
+        job_id=task.id,
+        message="Analysis submission queued. Poll GET /submission-jobs/{job_id} for progress.",
+    )
+
+
+@app.get("/submission-jobs/{job_id}", response_model=SubmissionJobStatusResponse)
+def get_submission_job(job_id: str):
+    result = AsyncResult(job_id, app=celery_app)
+    status = _STATUS_MAP.get(result.state, result.state.lower())
+    response = SubmissionJobStatusResponse(job_id=job_id, status=status)
+
+    info = result.info  # progress meta (running) or return value (complete)
+
+    if result.state == "SUCCESS":
+        # The task ran without crashing, but the *submission* may still have
+        # failed (e.g. a 4xx rejection from ENA/BioSamples is returned as a dict
+        # with success=False, not raised). Surface that as a failed job rather
+        # than reporting "complete" for a submission that didn't go through.
+        payload = info if isinstance(info, dict) else {"result": info}
+        response.result = payload
+        response.message = payload.get("message")
+        response.submitted = payload.get("submitted_count")
+        if payload.get("success") is False:
+            response.status = "failed"
+            response.error = payload.get("error") or payload.get("message")
+            response.errors = payload.get("errors")
+    elif result.state == "FAILURE":
+        # The task raised and exhausted retries (or hit a non-retryable error).
+        response.error = str(info)
+        response.errors = [str(info)]
+    elif isinstance(info, dict):
+        # In-flight progress reported via update_state(meta=...).
+        response.stage = info.get("stage")
+        response.submitted = info.get("submitted")
+        response.total = info.get("total")
+
+    return response
 
 
 if __name__ == "__main__":

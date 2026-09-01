@@ -10,6 +10,7 @@ from lxml import etree
 from app.conversions.generate_experiment_xmls import get_xml_files
 from app.validation.constants import ENA_TEST_SERVER, ENA_PROD_SERVER
 from app.tracking.submission_tracker import save_submission_data
+from app.submission.retryable import RetryableSubmissionError, TRANSIENT_CURL_EXIT_CODES
 
 
 def _read_file_bytes(path: str) -> bytes:
@@ -80,7 +81,8 @@ class ExperimentSubmitter:
 
         return get_xml_files(prepared_data, submission_id, action=action)
 
-    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission") -> Dict[str, Any]:
+    def submit_to_ena(self, results: Dict[str, Any], credentials: Dict[str, str], action: str = "submission",
+                      raise_on_transient: bool = False) -> Dict[str, Any]:
         try:
             submission_id = str(uuid.uuid4())
 
@@ -137,6 +139,14 @@ class ExperimentSubmitter:
                 files=files,
             )
 
+            # curl couldn't reach ENA (connect/timeout/etc.) — the submission
+            # never landed, so it's safe to retry. In a background task, raise
+            # so Celery retries; the sync path falls through and reports failure.
+            if raise_on_transient and submit_to_ena_process.returncode in TRANSIENT_CURL_EXIT_CODES:
+                raise RetryableSubmissionError(
+                    f"curl exit {submit_to_ena_process.returncode} submitting experiment to ENA"
+                )
+
             # Parse results
             submission_results = ena_response.content
             success, error_messages, info_messages = _parse_submission_results(submission_results)
@@ -185,6 +195,9 @@ class ExperimentSubmitter:
                     'info_messages': info_messages
                 }
 
+        except RetryableSubmissionError:
+            # Let transient failures propagate so the background task retries.
+            raise
         except Exception as e:
             print(f"Error during ENA submission: {str(e)}")
             traceback.print_exc()
