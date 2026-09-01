@@ -1,14 +1,3 @@
-"""
-Celery application for the FAANG submission service.
-
-Validation stays inside FastAPI (it is fast, I/O-bound fan-out that asyncio
-handles well). Only *submission* — the long-running, state-changing,
-failure-sensitive work — is moved onto a durable background queue.
-
-Broker + result backend are both Redis. RabbitMQ is NOT required: Redis is a
-perfectly good Celery broker for this workload. Swap REDIS_URL for a RabbitMQ
-URL only if/when submission volume needs stronger queue semantics.
-"""
 import os
 
 from celery import Celery
@@ -26,11 +15,9 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
-    # JSON only — never pickle (credentials travel through the broker).
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    # Report a STARTED state so the status endpoint can show "running".
     task_track_started=True,
     # Keep job state around for a day so the frontend can poll the result.
     result_expires=60 * 60 * 24,
@@ -41,7 +28,7 @@ celery_app.conf.update(
     broker_connection_retry_on_startup=True,
     # Do NOT persist task args (they contain Webin credentials) in results.
     result_extended=False,
-    # Let the app's own logging/stdout flow through instead of Celery hijacking
-    # sys.stdout/stderr inside the worker process.
+    # Let the app's own logging/stdout flow through
+    # sys.stdout/stderr inside the worker process
     worker_redirect_stdouts=False,
 )

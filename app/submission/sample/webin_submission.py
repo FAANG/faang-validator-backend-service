@@ -95,9 +95,7 @@ class WebinBioSamplesSubmission:
                     tmp[key] = value
             name = tmp['name']
 
-            # Idempotency guard: if this alias was already submitted in a prior
-            # attempt of this job (worker crash / retry), reuse its accession and
-            # skip the POST so we don't create a duplicate BioSample.
+            # Idempotency guard
             if idempotency is not None:
                 prior_accession = idempotency.seen(name)
                 if prior_accession is not None:
@@ -131,10 +129,6 @@ class WebinBioSamplesSubmission:
 
                 print(f"Failed to submit sample {name}: Status {create_submission_response.status_code}, Details: {error_msg}")
 
-                # An upstream 5xx is transient — BioSamples is having a moment.
-                # In a background task, raise so Celery retries (already-submitted
-                # samples are skipped by the idempotency guard). A 4xx is a real
-                # rejection and is returned as a permanent error below.
                 if raise_on_transient and create_submission_response.status_code >= 500:
                     raise RetryableSubmissionError(
                         f"BioSamples returned {create_submission_response.status_code} "
@@ -159,8 +153,6 @@ class WebinBioSamplesSubmission:
                 'accession']
             print(f"Successfully submitted sample {name}: {biosamples_ids[name]}")
 
-            # Durably record success *immediately* so a crash on the next sample
-            # doesn't cause this one to be re-submitted on retry.
             if idempotency is not None:
                 idempotency.record(name, biosamples_ids[name])
 

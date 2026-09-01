@@ -122,9 +122,6 @@ class AnalysisSubmitter:
                 capture_output=True
             )
 
-            # curl couldn't reach ENA (connect/timeout/etc.) — the submission
-            # never landed, so it's safe to retry. In a background task, raise
-            # so Celery retries; the sync path falls through and reports failure.
             if raise_on_transient and submit_to_ena_process.returncode in TRANSIENT_CURL_EXIT_CODES:
                 raise RetryableSubmissionError(
                     f"curl exit {submit_to_ena_process.returncode} submitting analysis to ENA"
@@ -171,7 +168,6 @@ class AnalysisSubmitter:
                 }
 
         except RetryableSubmissionError:
-            # Let transient failures propagate so the background task retries.
             raise
         except Exception as e:
             print(f"Error during ENA submission: {str(e)}")
