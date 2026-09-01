@@ -1,0 +1,19 @@
+substitutions:
+  _IMAGE: europe-west2-docker.pkg.dev/prj-ext-prod-faang-gcp-dr/cloud-run-source-deploy/faang-validator-backend-service/faang-validator-backend-service
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_IMAGE}:${COMMIT_SHA}
+      - -t
+      - ${_IMAGE}:latest
+      - .
+
+images:
+  - ${_IMAGE}:${COMMIT_SHA}
+  - ${_IMAGE}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-validation-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: celery-validation
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: celery-validation
+    spec:
+      containers:
+      - name: celery-validation
+        # TODO: replace with your NEW backend image once built & pushed to the registry
+        image: eu.gcr.io/prj-ext-prod-faang-gcp-dr/dcc-validate-metadata/faang-validator-api:latest
+        imagePullPolicy: Always
+        command: ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+        env:
+        - name: REDIS_URL
+          value: redis://redis-validation-service:6379/0
+        - name: ES_URL
+          value: https://prj-ext-dev-faang-gcp-dr.es.europe-west2.gcp.elastic-cloud.com
+        - name: ES_USER
+          valueFrom:
+            secretKeyRef:
+              key: es_user
+              name: gcp-es-credentials
+        - name: ES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: es_password
+              name: gcp-es-credentials
+      imagePullSecrets:
+      - name: regcred
