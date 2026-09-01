@@ -189,6 +189,10 @@ cython_debug/
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
+# Import script output and cache
+output/
+etag_cache/
+
 # Ruff stuff:
 .ruff_cache/
 
