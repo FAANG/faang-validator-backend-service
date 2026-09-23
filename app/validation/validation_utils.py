@@ -1,4 +1,5 @@
 from typing import Any, Optional, Literal
+from datetime import date, datetime, time
 import re
 
 
@@ -172,6 +173,38 @@ def validate_date_format(
         raise ValueError(f"Invalid {field_name} format: {v}. Must match {unit} pattern")
 
     return v
+
+
+def normalize_collection_date(value: Any, unit: Optional[str]) -> str:
+    field_name = "Specimen collection date"
+    if isinstance(value, datetime):
+        if value.time() != time.min or value.tzinfo is not None:
+            raise ValueError(f"{field_name} must not contain a time or timezone")
+        value = value.date().isoformat()
+    elif isinstance(value, date):
+        value = value.isoformat()
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} is required and must be a date or missing-value term")
+    value = value.strip()
+
+    if value in {"not applicable", "not collected", "not provided", "restricted access"}:
+        return value
+
+    suffixes = {"YYYY-MM-DD": "", "YYYY-MM": "-01", "YYYY": "-01-01"}
+    if unit not in suffixes:
+        raise ValueError(f"{field_name} requires Unit YYYY-MM-DD, YYYY-MM, or YYYY")
+
+    # pandas reads an Excel date cell as this string when dtype=str is used.
+    if unit == "YYYY-MM-DD" and re.fullmatch(r"[12]\d{3}-\d{2}-\d{2} 00:00:00", value):
+        value = value[:10]
+
+    validate_date_format(value, unit, field_name)
+    try:
+        date.fromisoformat(value + suffixes[unit])
+    except ValueError as exc:
+        raise ValueError(f"Invalid {field_name}: {value}. Must be a real calendar date") from exc
+    return value
 
 
 def validate_time_format(v: Any, field_name: str = "Time") -> Optional[str]:
