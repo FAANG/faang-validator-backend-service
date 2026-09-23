@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from app.validation.sample.base_validator import BaseValidator
 from app.validation.generic_validator_classes import OntologyValidator, RelationshipValidator
 from app.rulesets_pydantics.sample.specimen_ruleset import FAANGSpecimenFromOrganismSample
-from app.validation.validation_utils import auto_export_remaining_fields, normalize_collection_date
+from app.validation.validation_utils import auto_export_remaining_fields, normalize_specimen_collection_date
 
 
 class SpecimenValidator(BaseValidator):
@@ -57,7 +57,7 @@ class SpecimenValidator(BaseValidator):
 
         # Specimen collection date
         biosample_data["characteristics"]["specimen collection date"] = [{
-            "text": normalize_collection_date(
+            "text": normalize_specimen_collection_date(
                 model.specimen_collection_date, model.specimen_collection_date_unit
             ),
             "unit": model.specimen_collection_date_unit

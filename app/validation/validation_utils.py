@@ -175,7 +175,7 @@ def validate_date_format(
     return v
 
 
-def normalize_collection_date(value: Any, unit: Optional[str]) -> str:
+def normalize_specimen_collection_date(value: Any, unit: Optional[str]) -> str:
     field_name = "Specimen collection date"
     if isinstance(value, datetime):
         if value.time() != time.min or value.tzinfo is not None:
