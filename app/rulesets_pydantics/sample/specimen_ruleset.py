@@ -4,7 +4,7 @@ from app.validation.validation_utils import (
     normalize_ontology_term,
     is_restricted_value,
     validate_sample_name,
-    validate_date_format,
+    normalize_specimen_collection_date,
     validate_protocol_url,
     validate_non_negative_numeric,
     validate_percentage,
@@ -171,11 +171,11 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
     def validate_sample_name_field(cls, v):
         return validate_sample_name(v)
 
-    @field_validator('specimen_collection_date')
+    @field_validator('specimen_collection_date', mode='before')
     def validate_specimen_collection_date_format(cls, v, info):
         values = info.data
         unit = values.get('Unit') or values.get('specimen_collection_date_unit')
-        return validate_date_format(v, unit, "Specimen collection date")
+        return normalize_specimen_collection_date(v, unit)
 
     @field_validator('developmental_stage_term_source_id')
     def validate_developmental_stage_term(cls, v, info):
