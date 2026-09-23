@@ -52,9 +52,9 @@ class FAANGSpecimenFromOrganismSample(SampleCoreMetadata):
     # required fields
     sample_name: str = Field(..., validation_alias=AliasChoices("Sample Name", "Biosample ID"))
 
-    specimen_collection_date: Union[str, Literal["restricted access"]] = Field(..., alias="Specimen Collection Date")
     specimen_collection_date_unit: Literal["YYYY-MM-DD", "YYYY-MM", "YYYY", "restricted access"] = Field(...,
                                                                                                          alias="Unit")
+    specimen_collection_date: Union[str, Literal["restricted access"]] = Field(..., alias="Specimen Collection Date")
     geographic_location: Literal[
         "Afghanistan", "Albania", "Algeria", "American Samoa", "Andorra", "Angola", "Anguilla",
         "Antarctica", "Antigua and Barbuda", "Arctic Ocean", "Argentina", "Armenia", "Aruba",
