@@ -72,6 +72,8 @@ def submit_experiment_task(
     return submitter.submit_to_ena(
         results=prepared_results, credentials=credentials, action=action,
         raise_on_transient=True,
+        # Shown in the frontend while we check ENA after an unclear response.
+        progress_callback=lambda stage: self.update_state(state="STARTED", meta={"stage": stage}),
     )
 
 
