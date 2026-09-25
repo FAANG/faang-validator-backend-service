@@ -1,7 +1,6 @@
 import os
 import uuid
 import subprocess
-
 import copy
 import traceback
 from typing import Dict, Any, Optional, Callable
@@ -31,6 +30,12 @@ def _is_receipt_xml(body: bytes) -> bool:
         return etree.fromstring(body).tag == 'RECEIPT'
     except Exception:
         return False
+
+
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file's contents as bytes (used to build multipart upload parts)."""
+    with open(path, 'rb') as fh:
+        return fh.read()
 
 
 def _parse_submission_results(submission_results) -> tuple:
